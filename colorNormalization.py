@@ -12,7 +12,6 @@ import random
 
 #Function to select random images from the propper classes
 def getImages(types, n):
-    print('In getimages')
     #Iterate through image classes and normalize the colors
     images = []
     labels = []
@@ -25,12 +24,10 @@ def getImages(types, n):
             image = plt.imread(fileName)
             images.append(image)
             labels.append(['{}_{}.png'.format(type, sample), 'None', 'None', 'None'])
-    print('Done In getimages')
     return images, labels
 
 #Function to normalize the colors of the images
 def colorNormalize(imageList, labelList, n):
-    print('In cn')
     normalizedImages = []
     target = rgb2lab(imageList[0])
     normalizedImages.append(lab2rgb(target))
@@ -49,11 +46,9 @@ def colorNormalize(imageList, labelList, n):
         a[a < 0] = 0
         b[b < 0] = 0
         normalizedImages.append(lab2rgb(np.stack((l, a, b), 2)))
-    print('out of cn')
     return normalizedImages, labelList
 
 def cropRotateFlip(imageList, labelList, n):
-    print('IN crf')
     imagesToReturn = []
     lablelsToReturn = []
     for i in range(len(imageList)):
@@ -83,18 +78,14 @@ def cropRotateFlip(imageList, labelList, n):
             label[3] = '{}'.format(rotations[0] * 90)
             imagesToReturn.append(image)
             lablelsToReturn.append(label)
-    print('out of crf')
     return imagesToReturn, lablelsToReturn
 
 def saveSampleImages(imageList, labelList):
-    print('In save')
     samples = random.sample(range(0, len(imageList)), 25)
-    #samples = range(0, len(imageList))
     toReturn = []
     count = 0
     for i in samples:
         scipy.misc.toimage(imageList[i], cmin = 0, cmax = 1).save('DisplayImages/{}.png'.format(count))
         toReturn.append(labelList[i])
         count += 1
-    print('out of save')
     return toReturn
