@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import warnings
 import json
 from skimage.color import rgb2hsv, rgb2lab
+import random
 
 #Written Code
 import colorNormalization as cn
@@ -28,6 +29,7 @@ import extractFeatures as ef
 totalClicks = 0
 images = []
 preCMImages = []
+ttsIndex = 0
 labels = None
 features = None
 ldaPoints = None
@@ -77,11 +79,11 @@ def renderTabContent(tab):
                 ],
                 placeholder = 'Select Operations',
                 multi = True),
-            html.P('Select Number of Images Per Class', style = {'textAlign': 'center', 'padding-top': '10px'}),
+            html.P('Select Number of Images Per Class', style = {'textAlign': 'center', 'padding-top': '30px'}),
             dcc.Slider(
                 id = 'numImages-slider',
                 min = 25, max = 100, step = 1,
-                marks={
+                marks = {
                     25: '25',
                     100: '100'
                 },
@@ -91,13 +93,23 @@ def renderTabContent(tab):
             dcc.Slider(
                 id = 'numUses-slider',
                 min = 1, max = 10, step = 1,
-                marks={
+                marks = {
                     1: '1',
                     10: '10'
                 },
                 value = 5
             ),
-            html.Button('Compile Data Set', id = 'compile-button', style = {'width': '40%', 'margin-left': '30%', 'margin-right': '30%'}),
+            html.P('Select Train/Test Split Percentage', style = {'textAlign': 'center', 'padding-top': '10px'}),
+            dcc.Slider(
+                id = 'tts-slider',
+                min = 0, max = 100, step = 1,
+                marks = {
+                    0: '0%',
+                    100: '100%'
+                },
+                value = 80
+            ),
+            html.Button('Compile Data Set', id = 'compile-button', style = {'width': '40%', 'margin-top': '30px', 'margin-left': '30%', 'margin-right': '30%'}),
             dcc.Loading(html.Div(id = 'images-content'))
         ],
         style = {
@@ -107,7 +119,7 @@ def renderTabContent(tab):
         })
     elif tab == 'p2-tab':
         return html.Div(children = [
-            html.H6('Total Images: {}'.format(len(images)), style = {'textAlign': 'center', 'padding-top': '20px', 'padding-below': '20px'}),
+            html.H6('Total Training Images: {}'.format(len(images[:ttsIndex])), style = {'textAlign': 'center', 'padding-top': '20px', 'padding-below': '20px'}),
             html.Button('Compile Feature Data Set', id = 'features-button', style = {'width': '40%', 'margin-left': '30%', 'margin-right': '30%'}),
             dcc.Loading(html.Div(id = 'features-content')),
             html.Div(id = 'click-data')
@@ -123,25 +135,52 @@ def renderTabContent(tab):
               Input('type-dropdown', 'value'),
               Input('operations-dropdown', 'value'),
               Input('numImages-slider', 'value'),
-              Input('numUses-slider', 'value')])
-def renderTab1Content(clicks, type, operation, numImages, numUse):
-    global totalClicks, images, preCMImages, labels, features
+              Input('numUses-slider', 'value'),
+              Input('tts-slider', 'value')])
+def renderTab1Content(clicks, type, operation, numImages, numUse, tts):
+    global totalClicks, images, preCMImages, labels, features, ttsIndex
     if clicks is not None and clicks > totalClicks:
         if type is not None and operation is not None:
+            #Read in images from the file
             images, labels = cn.getImages(type, numImages)
+            #Randomly apply crops, rotations, and flips
             if 'CRF' in operation:
                 images, labels = cn.cropRotateFlip(images, labels, numUse)
+                #Move testing data to back of image array
+                count = 0;
+                imagesHold, imagesTest = [], []
+                labelsHold, labelsTest = [], []
+                for i in range(len(images)):
+                    if count > numImages * numUse:
+                        count = 0;
+                    if count >= int(numImages * numUse * tts / 100):
+                        imagesTest.append(images[i])
+                        labelsTest.append(labels[i])
+                    else:
+                        imagesHold.append(images[i])
+                        labelsHold.append(labels[i])
+                    count += 1
+                images = imagesHold + imagesTest
+                labels = labelsHold + labelsTest
+            #Randomly sort training data
+            ttsIndex = int(len(images) * (tts / 100))
+            hold = list(zip(images[:ttsIndex], labels[:ttsIndex]))
+            random.shuffle(hold)
+            images[:ttsIndex], labels[:ttsIndex] = zip(*hold)
+            #Copy image array and extract pre-normilization color features
             preCMImages = images
             features = ef.getColorFeatures(images)
+            #Perform color normilization
             if 'N' in operation:
                 images, lables = cn.colorNormalize(images, labels, numImages)
-            showLabels = cn.saveSampleImages(images, labels)
+            showLabels = cn.saveSampleImages(images[:ttsIndex], labels[:ttsIndex])
             toAppend = []
             for i in range(25):
                 toAppend.append(html.Img(id = 'img{}'.format(i), src = Image.open('DisplayImages/{}.png'.format(i)), style = {'width': '15%', 'padding-left': '2.5%', 'padding-right': '2.5%', 'padding-bottom': '30px'}))
                 toAppend.append(dbc.Tooltip(['Origional Image: {}'.format(showLabels[i][0]), html.Br(), 'Crop: {}, Flip: {}, Rotate: {}'.format(showLabels[i][1], showLabels[i][2], showLabels[i][3])], target = 'img{}'.format(i), style = {'textAlign': 'center', 'fontSize': '12px'}))
             totalClicks = clicks
             return html.Div(children = [
+                    html.H6('{} Training Images, {} Testing Images'.format(len(images[:ttsIndex]), len(images[ttsIndex:])), style = {'textAlign': 'center', 'padding-bottom': '30px'}),
                     html.H6('25 Sample Images', style = {'textAlign': 'center', 'padding-bottom': '30px'}),
                     html.Div(children = toAppend)
                 ],
@@ -159,8 +198,10 @@ def renderTab2Content(clicks):
     global images, labels, features, ldaPoints
     if clicks is not None:
         moreFeatures = ef.getOtherFeatures(images)
+        print(features.shape)
+        print(moreFeatures.shape)
         features = np.hstack((features, moreFeatures))
-        points, numLabels, variance = ef.performLDA(features, labels)
+        points, numLabels, variance = ef.performLDA(features[:ttsIndex, :], labels[:ttsIndex])
         if points.shape[1] == 1:
             points = np.hstack((points, np.zeros([points.shape[0], 1])))
         ldaPoints = points
@@ -205,26 +246,22 @@ def renderTab2Content(clicks):
 
 @app.callback(Output('click-data', 'children'),
             [Input('lda-graph', 'clickData')])
-def display_click_data(clickData):
+def displayClickData(clickData):
     global images, preCMImages, labels, ldaPoints, features
     if clickData is not None:
         index = np.where(ldaPoints == clickData['points'][0]['x'])[0][0]
         image = images[index]
         preCMImage = preCMImages[index]
         ef.savePicture(preCMImage, 'efOrigionalImage')
-        print('image saved')
         rgbFig = ff.create_distplot([list(preCMImage[::4, ::4, 0].flatten()), list(preCMImage[::4, ::4, 1].flatten()), list(preCMImage[::4, ::4, 2].flatten())], ['Red Layer', 'Green Layer', 'Blue Layer'], colors = ['red', 'green', 'blue'], bin_size = 0.02)
         rgbFig.update_layout({'title': 'RBG Histogram', 'xaxis': {'title': 'Color Layer Values', 'range': [0, 1]}, 'yaxis': {'title': 'Count'}, 'plot_bgcolor': 'rgba(0, 0, 0, 0)'})
-        print('rbg done')
         preCMImage1 = rgb2hsv(preCMImage)
         hsvFig = ff.create_distplot([list(preCMImage1[::4, ::4, 0].flatten()), list(preCMImage1[::4, ::4, 1].flatten()), list(preCMImage1[::4, ::4, 2].flatten())], ['Hue Layer', 'Saturation Layer', 'Value Layer'], colors = ['red', 'gray', 'black'], bin_size = 0.02)
         hsvFig.update_layout({'title': 'HSV Histogram', 'xaxis': {'title': 'Color Layer Values', 'range': [0, 1]}, 'yaxis': {'title': 'Count'}, 'plot_bgcolor': 'rgba(0, 0, 0, 0)'})
-        print('hsv done')
         preCMImage2 = rgb2lab(preCMImage)
         labFig = ff.create_distplot([list(preCMImage2[::4, ::4, 0].flatten()), list(preCMImage2[::4, ::4, 1].flatten()), list(preCMImage2[::4, ::4, 2].flatten())], ['L Layer', 'A Layer', 'B Layer'], colors = ['cyan', 'magenta', 'orange'], bin_size = 0.02)
         labFig.update_layout({'title': 'LAB Histogram', 'xaxis': {'title': 'Color Layer Values', 'range': [0, 1]}, 'yaxis': {'title': 'Count'}, 'plot_bgcolor': 'rgba(0, 0, 0, 0)'})
         print('lab done')
-        ef.saveCER(image)
         return [
             html.P('Origional Image Filename: {}'.format(labels[index][0]), style = {'textAlign': 'center', 'padding-top': '30px'}),
             html.P('Crop: {}, Flip: {}, Rotate: {}'.format(labels[index][1], labels[index][2], labels[index][3]), style = {'textAlign': 'center'}),
@@ -262,7 +299,7 @@ def display_click_data(clickData):
             html.P('Number of Small Circles: {}'.format(features[index, 103]), style = {'textAlign': 'center'}),
             html.P('Number of Big Circles: {}'.format(features[index, 104]), style = {'textAlign': 'center'})
         ]
-        
+
 #Start dis bitch
 if __name__ == '__main__':
     app.run_server(debug = True)

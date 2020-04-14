@@ -20,7 +20,6 @@ def getImages(types, n):
         samples = random.sample(range(1, 101), n)
         for sample in samples:
             fileName = 'ImageData/{}_{}.png'.format(type, sample)
-            #image = Image.open(fileName)
             image = plt.imread(fileName)
             images.append(image)
             labels.append(['{}_{}.png'.format(type, sample), 'None', 'None', 'None'])
