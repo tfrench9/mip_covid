@@ -17,7 +17,7 @@ for filename in glob.glob('images_raw/CT_COVID/*.png'):
     image.close()
 
 i = 0
-for filename in glob.glob('images_raw/CT_COVID/*.png'):
+for filename in glob.glob('images_raw/CT_nonCOVID/*.png'):
     print(filename)
     image = Image.open(filename)
     imageNew = image.resize((500, 300))
