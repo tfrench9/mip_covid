@@ -33,7 +33,6 @@ for row in meta.iterrows():
         else:
             imageNew.save('images_processed_2/{}/{}_{}_{}.png'.format(view, types[ti][:2], pid, i[ti]))
         i[ti] += 1
-
         print('images_processed_2/{}/{}_{}_{}.png'.format(view, types[ti][:2], pid, i[ti]))
         image.close()
     except:
