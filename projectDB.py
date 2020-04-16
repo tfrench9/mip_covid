@@ -7,6 +7,7 @@ import plotly.figure_factory as ff
 
 #Dash Dependencies
 import dash
+import dash_table
 import dash_html_components as html
 import dash_core_components as dcc
 from dash.dependencies import Input, Output
@@ -14,6 +15,7 @@ import dash_bootstrap_components as dbc
 
 #Other Dependencies
 import numpy as np
+import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
 import warnings
@@ -24,15 +26,21 @@ import random
 #Written Code
 import colorNormalization as cn
 import extractFeatures as ef
+import predictionModels as pm
 
 #Global Variable Definations
 totalClicks = 0
 images = []
 preCMImages = []
 ttsIndex = 0
+lastClicks = 0
 labels = None
 features = None
 ldaPoints = None
+numLabels = None
+points = None
+newNumLabels = None
+lda = None
 
 #Stylesheet and App Configuration
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -126,7 +134,9 @@ def renderTabContent(tab):
         ])
     elif tab == 'p3-tab':
         return html.Div([
-            html.H3('Tab content 3')
+            html.H6('Test Basic Prediction Algorithms', style = {'textAlign': 'center', 'padding-top': '20px', 'padding-below': '20px'}),
+            html.Button('See Testing Data Projected on LDA Feature Space', id = 'prediction-button', style = {'width': '40%', 'margin-left': '30%', 'margin-right': '30%'}),
+            html.Div(id = 'prediction-content')
         ])
 
 #Tab1 callback
@@ -195,13 +205,11 @@ def renderTab1Content(clicks, type, operation, numImages, numUse, tts):
 @app.callback(Output('features-content', 'children'),
              [Input('features-button', 'n_clicks')])
 def renderTab2Content(clicks):
-    global images, labels, features, ldaPoints
+    global images, labels, features, ldaPoints, numLabels, lda
     if clicks is not None:
         moreFeatures = ef.getOtherFeatures(images)
-        print(features.shape)
-        print(moreFeatures.shape)
         features = np.hstack((features, moreFeatures))
-        points, numLabels, variance = ef.performLDA(features[:ttsIndex, :], labels[:ttsIndex])
+        points, numLabels, variance, lda = ef.performLDA(features[:ttsIndex, :], labels[:ttsIndex])
         if points.shape[1] == 1:
             points = np.hstack((points, np.zeros([points.shape[0], 1])))
         ldaPoints = points
@@ -244,6 +252,7 @@ def renderTab2Content(clicks):
             )
         ]
 
+#Show T2 Point Click Specs
 @app.callback(Output('click-data', 'children'),
             [Input('lda-graph', 'clickData')])
 def displayClickData(clickData):
@@ -261,7 +270,6 @@ def displayClickData(clickData):
         preCMImage2 = rgb2lab(preCMImage)
         labFig = ff.create_distplot([list(preCMImage2[::4, ::4, 0].flatten()), list(preCMImage2[::4, ::4, 1].flatten()), list(preCMImage2[::4, ::4, 2].flatten())], ['L Layer', 'A Layer', 'B Layer'], colors = ['cyan', 'magenta', 'orange'], bin_size = 0.02)
         labFig.update_layout({'title': 'LAB Histogram', 'xaxis': {'title': 'Color Layer Values', 'range': [0, 1]}, 'yaxis': {'title': 'Count'}, 'plot_bgcolor': 'rgba(0, 0, 0, 0)'})
-        print('lab done')
         return [
             html.P('Origional Image Filename: {}'.format(labels[index][0]), style = {'textAlign': 'center', 'padding-top': '30px'}),
             html.P('Crop: {}, Flip: {}, Rotate: {}'.format(labels[index][1], labels[index][2], labels[index][3]), style = {'textAlign': 'center'}),
@@ -299,6 +307,208 @@ def displayClickData(clickData):
             html.P('Number of Small Circles: {}'.format(features[index, 103]), style = {'textAlign': 'center'}),
             html.P('Number of Big Circles: {}'.format(features[index, 104]), style = {'textAlign': 'center'})
         ]
+
+#Tab3 callback
+@app.callback(Output('prediction-content', 'children'),
+             [Input('prediction-button', 'n_clicks')])
+def renderTab3Content(clicks):
+    global images, labels, features, ldaPoints, numLabels, lda, points, newNumLabels
+    if clicks is not None:
+        points, newNumLabels = ef.performProjectionLDA(features[ttsIndex:, :], labels[ttsIndex:], lda)
+        if points.shape[1] == 1:
+            points = np.hstack((points, np.zeros([points.shape[0], 1])))
+        return [
+            dcc.Graph(
+                id = 'new-lda-graph',
+                figure = {
+                    'data': [
+                        {
+                            'x': ldaPoints[numLabels == 0, 0],
+                            'y': ldaPoints[numLabels == 0, 1],
+                            'mode': 'markers',
+                            'opacity': 0.5,
+                            'name': 'Necrosis',
+                            'marker': {'size': 8}
+                        },
+                        {
+                            'x': ldaPoints[numLabels == 1, 0],
+                            'y': ldaPoints[numLabels == 1, 1],
+                            'mode': 'markers',
+                            'opacity': 0.5,
+                            'name': 'Stroma',
+                            'marker': {'size': 8}
+                        },
+                        {
+                            'x': ldaPoints[numLabels == 2, 0],
+                            'y': ldaPoints[numLabels == 2, 1],
+                            'mode': 'markers',
+                            'opacity': 0.5,
+                            'name': 'Tumor',
+                            'marker': {'size': 8}
+                        },
+                        {
+                            'x': points[newNumLabels == 0, 0],
+                            'y': points[newNumLabels == 0, 1],
+                            'mode': 'markers',
+                            'name': 'Testing Necrosis',
+                            'marker': {'size': 8, 'symbol': 'x', 'color': '#1f77b4'}
+                        },
+                        {
+                            'x': points[newNumLabels == 1, 0],
+                            'y': points[newNumLabels == 1, 1],
+                            'mode': 'markers',
+                            'name': 'Testing Stroma',
+                            'marker': {'size': 8, 'symbol': 'x', 'color': '#ff7f0e'}
+                        },
+                        {
+                            'x': points[newNumLabels == 2, 0],
+                            'y': points[newNumLabels == 2, 1],
+                            'mode': 'markers',
+                            'name': 'Testing Tumor',
+                            'marker': {'size': 8, 'symbol': 'x', 'color': '#2ca02c'}
+                        },
+
+                    ],
+                    'layout': {
+                        'title': 'Testing Data Projected onto Trained LDA Feature Space',
+                        'xaxis': {'title': 'Principal Axis 1'},
+                        'yaxis': {'title': 'Principal Axis 2'}
+                    }
+                }
+            ),
+            html.Div(children = [
+                dcc.Dropdown(
+                    id = 'alg-dropdown',
+                    options = [
+                        {'label': 'Naive Bayes', 'value': 'NB'},
+                        {'label': 'K-Means (Nearest Centroid)', 'value': 'KM'},
+                        {'label': 'K Nearest Neighbors', 'value': 'KNN'},
+                        {'label': 'Support Vector Machine', 'value': 'SVM'},
+                    ],
+                    placeholder = 'Slelect Algorithms to Comapre',
+                    multi = True),
+                html.Button('View Parameter Selections', id = 'parameters-button', style = {'width': '40%', 'margin-left': '30%', 'margin-right': '30%'})],
+                style = {
+                    'width': '80%',
+                    'padding-bottom': '30px',
+                    'padding-left': '10%',
+                    'padding-right': '10%'}
+            ),
+            html.Div(id = 'parameter-selection')
+        ]
+
+#Parameter Callback
+@app.callback(Output('parameter-selection', 'children'),
+             [Input('parameters-button', 'n_clicks'),
+              Input('alg-dropdown', 'value')])
+def displayParameterContent(clicks, algs):
+    if clicks is not None and algs is not None:
+        toReturn = [html.H6('Please Select Parameters', style = {'textAlign': 'center', 'padding-top': '30px'})]
+        if 'NB' in algs:
+            toReturn.append(
+                html.Div(children = [
+                    html.P('Naive Bayes: No Parameter Selection Required', style = {'textAlign': 'center', 'padding-top': '30px'})
+                ], style = {'width': '50%', 'padding-left': '25%', 'padding-right': '25%'})
+            )
+        if 'KM' in algs:
+            toReturn.append(
+                html.Div(children = [
+                    html.P('K-Means: Select Number of Clusters (k)', style = {'textAlign': 'center', 'padding-top': '30px'}),
+                    dcc.Slider(
+                        id = 'KM-slider',
+                        min = 1, max = 5, step = 1,
+                        marks = {
+                            1: '1',
+                            5: '5'
+                        },
+                        value = 3
+                    ),
+                ], style = {'width': '50%', 'padding-left': '25%', 'padding-right': '25%'})
+            )
+        if 'KNN' in algs:
+            toReturn.append(
+                html.Div(children = [
+                    html.P('K Nearest Neighbors: Select Number of Neighboring Points (k)', style = {'textAlign': 'center', 'padding-top': '30px'}),
+                    dcc.Slider(
+                        id = 'KNN-slider',
+                        min = 1, max = 20, step = 1,
+                        marks = {
+                            1: '1',
+                            20: '20'
+                        },
+                        value = 5
+                    ),
+                ], style = {'width': '50%', 'padding-left': '25%', 'padding-right': '25%'})
+            )
+        if 'SVM' in algs:
+            toReturn.append(
+                html.Div(children = [
+                    html.P('Support Vector Machine: Select the Kernal', style = {'textAlign': 'center', 'padding-top': '30px'}),
+                    dcc.Dropdown(
+                        id = 'SVM-dropdown',
+                        options = [
+                            {'label': 'Linear', 'value': 'linear'},
+                            {'label': 'Radial Basis Function', 'value': 'rbf'},
+                            {'label': 'Polynomial', 'value': 'poly'},
+                            {'label': 'Sigmoid', 'value': 'sigmoid'},
+                        ],
+                        placeholder = 'Slelect Desired Kernel',
+                        multi = False),
+                    html.P('Select the Regularization Parameter (C)', style = {'textAlign': 'center'}),
+                    dcc.Slider(
+                        id = 'C-slider',
+                        min = 1, max = 5, step = 0.1,
+                        marks = {
+                            1: '1',
+                            5: '5'
+                        },
+                        value = 1),
+                ], style = {'width': '50%', 'padding-left': '25%', 'padding-right': '25%'})
+            )
+        toReturn.append(html.Button('Run All', id = 'run-button', style = {'width': '40%', 'margin-left': '30%', 'margin-right': '30%'}))
+        toReturn.append(dcc.Loading(html.Div(id = 'results')))
+        return toReturn
+    else:
+        return [html.P('Awaiting Valid User Input', style = {'textAlign': 'center', 'padding-top': '30px'})]
+
+#Parameter Callback
+@app.callback(Output('results', 'children'),
+             [Input('run-button', 'n_clicks'),
+              Input('alg-dropdown', 'value'),
+              Input('KM-slider', 'value'),
+              Input('KNN-slider', 'value'),
+              Input('SVM-dropdown', 'value'),
+              Input('C-slider', 'value')])
+def runResults(clicks, algs, kmK, knnK, svmKernel, svmC):
+    global lastClicks, ldaPoints, numLabels, points, newNumLabels
+    if clicks is not None and clicks > lastClicks:
+        lastClicks = clicks
+        data = []
+        if 'NB' in algs:
+            r = pm.naiveBays(ldaPoints, numLabels, points, newNumLabels)
+            data.append(pm.formatResults('Naive Bayes', r))
+        if 'KM' in algs:
+            r = pm.kMeans(ldaPoints, numLabels, points, newNumLabels, kmK)
+            data.append(pm.formatResults('K-Means (k = {})'.format(kmK), r))
+        if 'KNN' in algs:
+            r = pm.kNN(ldaPoints, numLabels, points, newNumLabels, knnK)
+            data.append(pm.formatResults('K Nearest Neighbors (k = {})'.format(knnK), r))
+        if 'SVM' in algs:
+            r = pm.svm(ldaPoints, numLabels, points, newNumLabels, svmKernel, svmC)
+            data.append(pm.formatResults('SVM ({} kernel, c = {})'.format(svmKernel, svmC), r))
+        cols = ['Classifier', 'Overall Accuracy', 'Necrosis Properly Labeled', 'Necrosis Labeled as Stroma', 'Necrosis Labeled as Tumor', 'Stroma Properly Labeled', 'Stroma Labeled as Necrosis', 'Stroma Labeled as Tumor', 'Tumor Properly Labeled', 'Tumor Labeled as Necrosis', 'Tumor Labeled as Stroma']
+        df = pd.DataFrame(data = data, columns = cols)
+        return [html.Div(children = [
+            dash_table.DataTable(
+                id = 'results-table',
+                columns = [{"name": i, "id": i} for i in df.columns],
+                data = df.to_dict('records'),
+                style_table = {'overflowX': 'scroll'}
+            )
+        ], style = {'width': '80%', 'padding-top': '30px', 'padding-bottom': '30px', 'padding-left': '10%','padding-right': '10%'})]
+    else:
+        pass
+
 
 #Start dis bitch
 if __name__ == '__main__':

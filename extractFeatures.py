@@ -105,9 +105,22 @@ def performLDA(features, labels):
         elif 'Tumor' in labels[i][0]:
             Y[i] = 2
     lda = LinearDiscriminantAnalysis(n_components = 2)
-    X_r2 = lda.fit(X, Y).transform(X)
+    projection = lda.fit(X, Y).transform(X)
     # Percentage of variance explained for each components
-    return X_r2, Y, lda.explained_variance_ratio_
+    return projection, Y, lda.explained_variance_ratio_, lda
+
+def performProjectionLDA(features, labels, lda):
+    X = features
+    Y = np.zeros(len(labels))
+    for i in range(len(labels)):
+        if 'Necrosis' in labels[i][0]:
+            Y[i] = 0
+        elif 'Stroma' in labels[i][0]:
+            Y[i] = 1
+        elif 'Tumor' in labels[i][0]:
+            Y[i] = 2
+    projection = lda.transform(X)
+    return projection, Y
 
 def savePicture(image, name):
     scipy.misc.toimage(image, cmin = 0, cmax = 1).save('DisplayImages/{}.png'.format(name))
