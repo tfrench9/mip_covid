@@ -3,11 +3,11 @@ import numpy as np
 from keras.utils import to_categorical
 import matplotlib.pyplot as plt
 from skimage.color import rgb2gray
+import random
 import os
 
-(train_X, train_Y), (test_X, test_Y) = fashion_mnist.load_data()
-
 images = os.listdir('AllSamples')
+random.shuffle(images)
 #images.sort()
 #images = images[0:500]
 data = np.zeros([len(images), 224, 224])
@@ -39,17 +39,6 @@ print('Output classes : ', classes)
 
 plt.figure(figsize = [5,5])
 
-# Display the first image in training data
-plt.subplot(121)
-plt.imshow(trainData[0, :, :], cmap = 'gray')
-plt.title("Ground Truth : {}".format(trainLabels[0]))
-
-# Display the first image in testing data
-plt.subplot(122)
-plt.imshow(testData[0, :, :], cmap = 'gray')
-plt.title("Ground Truth : {}".format(testLabels[0]))
-#plt.show()
-
 trainData = trainData.reshape(-1, 224, 224, 1)
 testData = testData.reshape(-1, 224, 224, 1)
 print(trainData.shape, testData.shape)
@@ -62,8 +51,7 @@ print('Original label:', trainLabels[0])
 print('After conversion to one-hot:', trainLabelsOH[0])
 
 from sklearn.model_selection import train_test_split
-trainData, validData, trainLabels, validLabels = train_test_split(trainData, trainLabelsOH, test_size = 0.1, random_state=13)
-
+trainData, validData, trainLabels, validLabels = train_test_split(trainData, trainLabelsOH, test_size = 0.1)
 
 import keras
 from keras.models import Sequential,Input,Model
@@ -77,10 +65,10 @@ epochs = 20
 num_classes = 3
 
 fashion_model = Sequential()
-fashion_model.add(Conv2D(32, kernel_size=(10, 10),activation='linear',input_shape= (224,224,1),padding='same'))
+fashion_model.add(Conv2D(32, kernel_size=(3, 3), activation = 'linear', input_shape= (224,224,1), padding='same'))
 fashion_model.add(LeakyReLU(alpha = 0.1))
-fashion_model.add(MaxPooling2D((4, 4),padding='same'))
-fashion_model.add(Dropout(0.25))
+fashion_model.add(MaxPooling2D((2, 2), padding = 'same'))
+fashion_model.add(Dropout(0.1))
 fashion_model.add(Conv2D(64, (5, 5), activation='linear',padding='same'))
 fashion_model.add(LeakyReLU(alpha=0.1))
 fashion_model.add(MaxPooling2D(pool_size=(3, 3),padding='same'))
@@ -88,14 +76,14 @@ fashion_model.add(Dropout(0.25))
 fashion_model.add(Conv2D(128, (3, 3), activation='linear',padding='same'))
 fashion_model.add(LeakyReLU(alpha=0.1))
 fashion_model.add(MaxPooling2D(pool_size=(2, 2),padding='same'))
-fashion_model.add(Dropout(0.4))
+fashion_model.add(Dropout(0.1))
 fashion_model.add(Flatten())
 fashion_model.add(Dense(128, activation='linear'))
 fashion_model.add(LeakyReLU(alpha=0.1))
-fashion_model.add(Dropout(0.3))
+fashion_model.add(Dropout(0.1))
 fashion_model.add(Dense(num_classes, activation='softmax'))
 
-fashion_model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adam(),metrics=['accuracy'])
+fashion_model.compile(loss = keras.losses.categorical_crossentropy, optimizer = keras.optimizers.Adam(), metrics = ['accuracy'])
 
 fashion_model.summary()
 
