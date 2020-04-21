@@ -2,12 +2,12 @@ from PIL import Image
 import numpy as np
 from skimage.color import rgb2lab, lab2rgb, grey2rgb
 import matplotlib.pyplot as plt
-import matplotlib
 import scipy.misc
 import png
 import cv2
 import imageio
 from sklearn.preprocessing import normalize
+from scipy.ndimage import gaussian_filter
 import random
 from os import listdir
 
@@ -74,7 +74,7 @@ def colorNormalize(imageList):
         image = imageList[i]
         imageMean = np.mean(image, (0, 1))
         imageSTD = np.std(image, (0, 1))
-        #Normalize lab layers
+        #Normalize layers
         r = (image[:, :, 0] - imageMean[0]) * targetSTD[0] / imageSTD[0] + targetMean[0]
         g = (image[:, :, 1] - imageMean[1]) * targetSTD[1] / imageSTD[1] + targetMean[1]
         b = (image[:, :, 2] - imageMean[2]) * targetSTD[2] / imageSTD[2] + targetMean[2]
@@ -84,13 +84,34 @@ def colorNormalize(imageList):
         normalizedImages.append(np.stack((r, g, b), 2))
     return normalizedImages
 
-def gaussianNoise(imageList, labelsList, strength):
-    strength = round(random.uniform(0, strength), 2)
+def gaussianNoise(imageList, labelList, maxStrength):
     for i in range(len(imageList)):
+        strength = round(random.uniform(0, maxStrength), 2)
         noise = grey2rgb(np.random.normal(0, strength, imageList[i].shape[:2]))
-        imageList[i] = (255 * imageList[i] + noise).astype('uint8') / 255
-        labelsList[i][5] = strength
-    return imageList, labelsList
+        hold = (255 * imageList[i] + noise)
+        hold[hold < 0] = 0
+        hold[hold > 255] = 255
+        if i == 0:
+            print(hold)
+        imageList[i] = hold.astype('uint8') / 255
+        labelList[i][5] = strength
+    return imageList, labelList
+
+def blurSharpen(imageList, labelList, min, max):
+    for i in range(len(imageList)):
+        filter = random.uniform(min, max)
+        if filter > 0:
+            kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
+            hold = cv2.filter2D(imageList[i], -1, kernel)
+            hold = cv2.filter2D(hold, -1, kernel)
+            hold[hold < 0] = 0
+            hold[hold > 1] = 1
+            imageList[i] = (filter / 3) * hold + (1 - (filter / 3)) * imageList[i]
+            labelList[i][4] = round(filter, 2)
+        else:
+            imageList[i] = gaussian_filter(imageList[i], sigma = round(-filter))
+            labelList[i][4] = round(filter, 2)
+    return imageList, labelList
 
 def saveSampleImages(imageList, labelList):
     samples = random.sample(range(0, len(imageList)), 25)

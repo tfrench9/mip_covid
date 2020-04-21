@@ -7,19 +7,16 @@ import numpy as np
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 import scipy.misc
 
-#Get RGB, HSV, and LAB color space means and STDs per layer (Indexes 0 - 17)
+#Get RGB, HSV, and LAB color space means and STDs per layer (Indexes 0 - 11)
 def getColorFeatures(images):
     toReturn = None
     for image in images:
         hsv = rgb2hsv(image)
-        lab = rgb2lab(image)
         rgbMean = np.mean(image, axis = (0, 1))
         rgbSTD = np.std(image, axis = (0, 1))
         hsvMean = np.mean(hsv, axis = (0, 1))
         hsvSTD = np.std(hsv, axis = (0, 1))
-        labMean = np.mean(lab, axis = (0, 1))
-        labSTD = np.std(lab, axis = (0, 1))
-        imageFeatures = np.concatenate((rgbMean.T, rgbSTD.T, hsvMean.T, hsvSTD.T, labMean.T, labSTD.T))
+        imageFeatures = np.concatenate((rgbMean.T, rgbSTD.T, hsvMean.T, hsvSTD.T))
         if toReturn is None:
             toReturn = imageFeatures
         else:
@@ -98,11 +95,11 @@ def performLDA(features, labels):
     X = features
     Y = np.zeros(len(labels))
     for i in range(len(labels)):
-        if 'Necrosis' in labels[i][0]:
+        if 'No' in labels[i][0]:
             Y[i] = 0
-        elif 'Stroma' in labels[i][0]:
+        elif 'Pn' in labels[i][0]:
             Y[i] = 1
-        elif 'Tumor' in labels[i][0]:
+        elif 'CO' in labels[i][0]:
             Y[i] = 2
     lda = LinearDiscriminantAnalysis(n_components = 2)
     projection = lda.fit(X, Y).transform(X)
@@ -113,11 +110,11 @@ def performProjectionLDA(features, labels, lda):
     X = features
     Y = np.zeros(len(labels))
     for i in range(len(labels)):
-        if 'Necrosis' in labels[i][0]:
+        if 'No' in labels[i][0]:
             Y[i] = 0
-        elif 'Stroma' in labels[i][0]:
+        elif 'Pn' in labels[i][0]:
             Y[i] = 1
-        elif 'Tumor' in labels[i][0]:
+        elif 'CO' in labels[i][0]:
             Y[i] = 2
     projection = lda.transform(X)
     return projection, Y
