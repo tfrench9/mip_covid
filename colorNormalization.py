@@ -9,43 +9,80 @@ import cv2
 import imageio
 from sklearn.preprocessing import normalize
 import random
+from os import listdir
 
 #Function to select random images from the propper classes
-def getImages(types, n):
-    #Iterate through image classes and normalize the colors
-    images = []
-    labels = []
+def getImages(types, p, tts):
+    #Determine all the files in the path
+    path = 'images_processed_2/lungs/'
+    fileNames = listdir(path)
+    #Identify unique patient IDs
+    pIDs = []
+    lengths = []
     for type in types:
-        #Open the files and append them to an images list
-        samples = random.sample(range(1, 101), n)
-        for sample in samples:
-            fileName = 'ImageData/{}_{}.png'.format(type, sample)
-            image = plt.imread(fileName)
-            images.append(image)
-            labels.append(['{}_{}.png'.format(type, sample), 'None', 'None', 'None'])
-    return images, labels
+        mask = [type in file for file in fileNames]
+        pID = [d.split('_')[1] for d, s in zip(fileNames, mask) if s]
+        lengths.append(len(set(pID)))
+        pIDs.append(pID)
+    nTrain = int(int(min(lengths) * p) * tts)
+    nTest = int(min(lengths) * p) - nTrain
+    #Iterate through image classes and read in images
+    trainImages = []
+    testImages = []
+    trainLabels = []
+    testLabels = []
+    for i in range(len(types)):
+        #Randomly select the max patient IDs
+        samples = random.sample(range(lengths[i]), nTrain + nTest)
+        trainSamples = samples[:nTrain]
+        testSamples = samples[nTrain:]
+        #Add images to training set
+        for sample in trainSamples:
+            #Find the set of images associated with a patient and select one
+            mask = ['{}_{}_'.format(types[i], pIDs[i][sample]) in file for file in fileNames]
+            index = random.choice([d.split('_')[2] for d, s in zip(fileNames, mask) if s])
+            #Read in both the left and right lung
+            for lr in range(2):
+                fileName = '{}{}_{}_{}_{}.png'.format(path, types[i], pIDs[i][sample], index, lr)
+                image = plt.imread(fileName)
+                trainImages.append(image[:, :, :3])
+                trainLabels.append([types[i], pIDs[i][sample], index, lr, 'None', 'None', 'None'])
+        #Add images to resting set
+        for sample in testSamples:
+            #Find the set of images associated with a patient and select one
+            mask = ['{}_{}_'.format(types[i], pIDs[i][sample]) in file for file in fileNames]
+            index = random.choice([d.split('_')[2] for d, s in zip(fileNames, mask) if s])
+            #Read in both the left and right lung
+            for lr in range(2):
+                fileName = '{}{}_{}_{}_{}.png'.format(path, types[i], pIDs[i][sample], index, lr)
+                image = plt.imread(fileName)
+                testImages.append(image[:, :, :3])
+                testLabels.append([types[i], pIDs[i][sample], index, lr, 'None', 'None'])
+    return trainImages, testImages, trainLabels, testLabels
 
 #Function to normalize the colors of the images
-def colorNormalize(imageList, labelList, n):
+def colorNormalize(imageList):
     normalizedImages = []
-    target = rgb2lab(imageList[0])
-    normalizedImages.append(lab2rgb(target))
-    targetMean = np.mean(target, (0, 1))
-    targetSTD = np.std(target, (0, 1))
-    for i in range(1, len(imageList)):
+    #target = imageList[0]
+    #normalizedImages.append(target)
+    #targetMean = np.mean(target, (0, 1))
+    #targetSTD = np.std(target, (0, 1))
+    targetMean = [0.4, 0.4, 0.4]
+    targetSTD = [0.2, 0.2, 0.2]
+    for i in range(len(imageList)):
         #Determine image mean and STD
-        image = rgb2lab(imageList[i])
+        image = imageList[i]
         imageMean = np.mean(image, (0, 1))
         imageSTD = np.std(image, (0, 1))
         #Normalize lab layers
-        l = (image[:, :, 0] - imageMean[0]) * targetSTD[0] / imageSTD[0] + targetMean[0]
-        a = (image[:, :, 1] - imageMean[1]) * targetSTD[1] / imageSTD[1] + targetMean[1]
+        r = (image[:, :, 0] - imageMean[0]) * targetSTD[0] / imageSTD[0] + targetMean[0]
+        g = (image[:, :, 1] - imageMean[1]) * targetSTD[1] / imageSTD[1] + targetMean[1]
         b = (image[:, :, 2] - imageMean[2]) * targetSTD[2] / imageSTD[2] + targetMean[2]
-        l[l < 0] = 0
-        a[a < 0] = 0
+        r[r < 0] = 0
+        g[g < 0] = 0
         b[b < 0] = 0
-        normalizedImages.append(lab2rgb(np.stack((l, a, b), 2)))
-    return normalizedImages, labelList
+        normalizedImages.append(np.stack((r, g, b), 2))
+    return normalizedImages
 
 def cropRotateFlip(imageList, labelList, n):
     imagesToReturn = []
