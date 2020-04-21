@@ -80,6 +80,7 @@ def renderTabContent(tab):
                     {'label': 'COVID-19', 'value': 'CO'}
                 ],
                 placeholder = 'Slelect Image Types to Preprocess',
+                value = ['No', 'Pn', 'CO'],
                 multi = True),
             dcc.Dropdown(
                 id = 'operations-dropdown',
@@ -89,6 +90,7 @@ def renderTabContent(tab):
                     {'label': 'Gaussian Noise', 'value': 'GN'},
                 ],
                 placeholder = 'Select Operations',
+                value = ['N', 'SB', 'GN'],
                 multi = True),
             html.P('Select Percent of Images Per Class', style = {'textAlign': 'center', 'padding-top': '30px'}),
             dcc.Slider(
