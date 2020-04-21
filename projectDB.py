@@ -30,12 +30,14 @@ import predictionModels as pm
 
 #Global Variable Definations
 totalClicks = 0
-images = []
-preCMImages = []
-ttsIndex = 0
+trainImages = []
+testImages = []
+trainLabels = []
+trainLabels = []
+preCNTrainImages = []
 lastClicks = 0
-labels = None
-features = None
+trainFeatures = None
+testFeatures = None
 ldaPoints = None
 numLabels = None
 points = None
@@ -52,7 +54,7 @@ warnings.filterwarnings("ignore")
 app.layout = html.Div([
     #Title
     html.H3("Georgia Tech ECE4783 Project", style = {'textAlign': 'center'}),
-    html.P("Medical Image Processing of Histopathological Images from Cancer Patients", style = {'textAlign': 'center'}),
+    html.P("Medical Image Processing of X-Ray Images from COVID-19 Patients", style = {'textAlign': 'center'}),
     #Tabs
     dcc.Tabs(id = "tabs", value = 'p1-tab', children = [
         dcc.Tab(label = 'Image Preprocessing', value = 'p1-tab'),
@@ -69,43 +71,55 @@ app.layout = html.Div([
 def renderTabContent(tab):
     if tab == 'p1-tab':
         return html.Div(children = [
-            html.H6('Select You Criteria', style = {'textAlign': 'center', 'padding-top': '20px', 'padding-below': '20px'}),
+            html.H6('Select Your Criteria', style = {'textAlign': 'center', 'padding-top': '20px', 'padding-below': '20px'}),
             dcc.Dropdown(
                 id = 'type-dropdown',
                 options = [
-                    {'label': 'Necrosis', 'value': 'Necrosis'},
-                    {'label': 'Stroma', 'value': 'Stroma'},
-                    {'label': 'Tumor', 'value': 'Tumor'}
+                    {'label': 'Healthy', 'value': 'No'},
+                    {'label': 'Pneumothorax', 'value': 'Pn'},
+                    {'label': 'COVID-19', 'value': 'CO'}
                 ],
                 placeholder = 'Slelect Image Types to Preprocess',
                 multi = True),
             dcc.Dropdown(
                 id = 'operations-dropdown',
                 options = [
-                    {'label': 'Reinhard Color Normalization', 'value': 'N'},
-                    {'label': 'Random Crop, Rotate, and Flip', 'value': 'CRF'},
+                    {'label': 'Color Normalization', 'value': 'N'},
+                    {'label': 'Sharpen/Blur', 'value': 'SB'},
+                    {'label': 'Gaussian Noise', 'value': 'GN'},
                 ],
                 placeholder = 'Select Operations',
                 multi = True),
-            html.P('Select Number of Images Per Class', style = {'textAlign': 'center', 'padding-top': '30px'}),
+            html.P('Select Percent of Images Per Class', style = {'textAlign': 'center', 'padding-top': '30px'}),
             dcc.Slider(
                 id = 'numImages-slider',
                 min = 25, max = 100, step = 1,
                 marks = {
-                    25: '25',
-                    100: '100'
+                    25: '25%',
+                    100: '100%'
                 },
                 value = 100
             ),
-            html.P('Select Image Use', style = {'textAlign': 'center', 'padding-top': '10px'}),
-            dcc.Slider(
-                id = 'numUses-slider',
-                min = 1, max = 10, step = 1,
+            html.P('Select Max Sharpen to Max Blur Range (If Applicable)', style = {'textAlign': 'center', 'padding-top': '10px'}),
+            dcc.RangeSlider(
+                id = 'sb-slider',
+                min = -10, max = 10, step = 0.1,
                 marks = {
-                    1: '1',
-                    10: '10'
+                    -10: '10 Blur',
+                    0: 'No Operation',
+                    10: '10 Sharpen'
                 },
-                value = 5
+                value = [-5, 5]
+            ),
+            html.P('Select Gaussian Noise Strength (If Applicable)', style = {'textAlign': 'center', 'padding-top': '30px'}),
+            dcc.Slider(
+                id = 'gn-slider',
+                min = 0, max = 30, step = 0.1,
+                marks = {
+                    0: '0',
+                    30: '30'
+                },
+                value = 2
             ),
             html.P('Select Train/Test Split Percentage', style = {'textAlign': 'center', 'padding-top': '10px'}),
             dcc.Slider(
@@ -145,52 +159,38 @@ def renderTabContent(tab):
               Input('type-dropdown', 'value'),
               Input('operations-dropdown', 'value'),
               Input('numImages-slider', 'value'),
-              Input('numUses-slider', 'value'),
+              Input('sb-slider', 'value'),
+              Input('gn-slider', 'value'),
               Input('tts-slider', 'value')])
-def renderTab1Content(clicks, type, operation, numImages, numUse, tts):
-    global totalClicks, images, preCMImages, labels, features, ttsIndex
+def renderTab1Content(clicks, type, operation, percentImages, sb, noise, tts):
+    global totalClicks, trainImages, testImages, trainLabels, testLabels, preCNTrainImages, trainFeatures
     if clicks is not None and clicks > totalClicks:
         if type is not None and operation is not None:
             #Read in images from the file
-            images, labels = cn.getImages(type, numImages)
-            #Randomly apply crops, rotations, and flips
-            if 'CRF' in operation:
-                images, labels = cn.cropRotateFlip(images, labels, numUse)
-                #Move testing data to back of image array
-                count = 0;
-                imagesHold, imagesTest = [], []
-                labelsHold, labelsTest = [], []
-                for i in range(len(images)):
-                    if count > numImages * numUse:
-                        count = 0;
-                    if count >= int(numImages * numUse * tts / 100):
-                        imagesTest.append(images[i])
-                        labelsTest.append(labels[i])
-                    else:
-                        imagesHold.append(images[i])
-                        labelsHold.append(labels[i])
-                    count += 1
-                images = imagesHold + imagesTest
-                labels = labelsHold + labelsTest
-            #Randomly sort training data
-            ttsIndex = int(len(images) * (tts / 100))
-            hold = list(zip(images[:ttsIndex], labels[:ttsIndex]))
-            random.shuffle(hold)
-            images[:ttsIndex], labels[:ttsIndex] = zip(*hold)
+            print('reading images')
+            trainImages, testImages, trainLabels, testLabels = cn.getImages(type, percentImages / 100, tts / 100)
             #Copy image array and extract pre-normilization color features
-            preCMImages = images
-            features = ef.getColorFeatures(images)
+            #preCNTrainImages = trainImages
+            #print('gathering features')
+            #trainFeatures = ef.getColorFeatures(trainImages)
+            #testFeatures = ef.getColorFeatures(testImages)
             #Perform color normilization
+            print('adding noise')
+            if 'GN' in operation:
+                trainImages, trainLabels = cn.gaussianNoise(trainImages, trainLabels, noise)
+            print('normalizing')
             if 'N' in operation:
-                images, lables = cn.colorNormalize(images, labels, numImages)
-            showLabels = cn.saveSampleImages(images[:ttsIndex], labels[:ttsIndex])
+                trainImages = cn.colorNormalize(trainImages)
+                testImages = cn.colorNormalize(testImages)
+            print('saving')
+            showLabels = cn.saveSampleImages(trainImages, trainLabels)
             toAppend = []
             for i in range(25):
                 toAppend.append(html.Img(id = 'img{}'.format(i), src = Image.open('DisplayImages/{}.png'.format(i)), style = {'width': '15%', 'padding-left': '2.5%', 'padding-right': '2.5%', 'padding-bottom': '30px'}))
-                toAppend.append(dbc.Tooltip(['Origional Image: {}'.format(showLabels[i][0]), html.Br(), 'Crop: {}, Flip: {}, Rotate: {}'.format(showLabels[i][1], showLabels[i][2], showLabels[i][3])], target = 'img{}'.format(i), style = {'textAlign': 'center', 'fontSize': '12px'}))
+                toAppend.append(dbc.Tooltip(['Diagnosis: {}, Patient ID: {}'.format(showLabels[i][0], showLabels[i][1]), html.Br(), 'L/R Lung {}, Blur/Sharpen: {}, Noise: {}'.format(showLabels[i][3], showLabels[i][4], showLabels[i][5])], target = 'img{}'.format(i), style = {'textAlign': 'center', 'fontSize': '12px'}))
             totalClicks = clicks
             return html.Div(children = [
-                    html.H6('{} Training Images, {} Testing Images'.format(len(images[:ttsIndex]), len(images[ttsIndex:])), style = {'textAlign': 'center', 'padding-bottom': '30px'}),
+                    html.H6('{} Training Images, {} Testing Images'.format(len(trainImages), len(testImages)), style = {'textAlign': 'center', 'padding-bottom': '30px'}),
                     html.H6('25 Sample Images', style = {'textAlign': 'center', 'padding-bottom': '30px'}),
                     html.Div(children = toAppend)
                 ],
