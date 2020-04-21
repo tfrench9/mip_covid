@@ -103,23 +103,23 @@ def renderTabContent(tab):
             html.P('Select Max Sharpen to Max Blur Range (If Applicable)', style = {'textAlign': 'center', 'padding-top': '10px'}),
             dcc.RangeSlider(
                 id = 'sb-slider',
-                min = -10, max = 10, step = 0.1,
+                min = -3, max = 3, step = 0.1,
                 marks = {
-                    -10: '10 Blur',
+                    -3: '3 Blur',
                     0: 'No Operation',
-                    10: '10 Sharpen'
+                    3: '3 Sharpen'
                 },
-                value = [-5, 5]
+                value = [-1, 1]
             ),
             html.P('Select Gaussian Noise Strength (If Applicable)', style = {'textAlign': 'center', 'padding-top': '30px'}),
             dcc.Slider(
                 id = 'gn-slider',
-                min = 0, max = 30, step = 0.1,
+                min = 0, max = 10, step = 0.1,
                 marks = {
                     0: '0',
-                    30: '30'
+                    10: '10'
                 },
-                value = 2
+                value = 3
             ),
             html.P('Select Train/Test Split Percentage', style = {'textAlign': 'center', 'padding-top': '10px'}),
             dcc.Slider(
@@ -141,7 +141,7 @@ def renderTabContent(tab):
         })
     elif tab == 'p2-tab':
         return html.Div(children = [
-            html.H6('Total Training Images: {}'.format(len(images[:ttsIndex])), style = {'textAlign': 'center', 'padding-top': '20px', 'padding-below': '20px'}),
+            html.H6('Total Training Images: {}'.format(len(trainImages)), style = {'textAlign': 'center', 'padding-top': '20px', 'padding-below': '20px'}),
             html.Button('Compile Feature Data Set', id = 'features-button', style = {'width': '40%', 'margin-left': '30%', 'margin-right': '30%'}),
             dcc.Loading(html.Div(id = 'features-content')),
             html.Div(id = 'click-data')
@@ -170,11 +170,12 @@ def renderTab1Content(clicks, type, operation, percentImages, sb, noise, tts):
             print('reading images')
             trainImages, testImages, trainLabels, testLabels = cn.getImages(type, percentImages / 100, tts / 100)
             #Copy image array and extract pre-normilization color features
-            #preCNTrainImages = trainImages
-            #print('gathering features')
-            #trainFeatures = ef.getColorFeatures(trainImages)
-            #testFeatures = ef.getColorFeatures(testImages)
-            #Perform color normilization
+            preCNTrainImages = trainImages
+            print('gathering features')
+            trainFeatures = ef.getColorFeatures(trainImages)
+            testFeatures = ef.getColorFeatures(testImages)
+            if 'SB' in operation:
+                trainImages, trainLabels = cn.blurSharpen(trainImages, trainLabels, sb[0], sb[1])
             print('adding noise')
             if 'GN' in operation:
                 trainImages, trainLabels = cn.gaussianNoise(trainImages, trainLabels, noise)
@@ -205,16 +206,18 @@ def renderTab1Content(clicks, type, operation, percentImages, sb, noise, tts):
 @app.callback(Output('features-content', 'children'),
              [Input('features-button', 'n_clicks')])
 def renderTab2Content(clicks):
-    global images, labels, features, ldaPoints, numLabels, lda
+    global trainImages, testImages, trainLabels, testLabels, trainFeatures, testFeatures, ldaPoints, numLabels, lda
     if clicks is not None:
-        moreFeatures = ef.getOtherFeatures(images)
-        features = np.hstack((features, moreFeatures))
-        points, numLabels, variance, lda = ef.performLDA(features[:ttsIndex, :], labels[:ttsIndex])
+        moreFeatures = ef.getOtherFeatures(trainImages)
+        trainFeatures = np.hstack((trainFeatures, moreFeatures))
+        #moreFeatures = ef.getOtherFeatures(testImages)
+        #testFeatures = np.hstack((testFeatures, moreFeatures))
+        points, numLabels, variance, lda = ef.performLDA(trainFeatures, trainLabels)
         if points.shape[1] == 1:
             points = np.hstack((points, np.zeros([points.shape[0], 1])))
         ldaPoints = points
         return [
-            html.P('{} Features Extracted Per Image'.format(features.shape[1]), style = {'textAlign': 'center', 'padding-top': '30px'}),
+            html.P('{} Features Extracted Per Image'.format(trainFeatures.shape[1]), style = {'textAlign': 'center', 'padding-top': '30px'}),
             html.P('{}% of variance explained with frist projected axis and {}% with second axis'.format(round(variance[0] * 100, 2), round(variance[1] * 100, 2)), style = {'textAlign': 'center'}),
             dcc.Graph(
                 id = 'lda-graph',
@@ -224,21 +227,21 @@ def renderTab2Content(clicks):
                             'x': points[numLabels == 0, 0],
                             'y': points[numLabels == 0, 1],
                             'mode': 'markers',
-                            'name': 'Necrosis',
+                            'name': 'Healthy',
                             'marker': {'size': 8}
                         },
                         {
                             'x': points[numLabels == 1, 0],
                             'y': points[numLabels == 1, 1],
                             'mode': 'markers',
-                            'name': 'Stroma',
+                            'name': 'Pneumothorax',
                             'marker': {'size': 8}
                         },
                         {
                             'x': points[numLabels == 2, 0],
                             'y': points[numLabels == 2, 1],
                             'mode': 'markers',
-                            'name': 'Tumor',
+                            'name': 'COVID-19',
                             'marker': {'size': 8}
                         }
                     ],
