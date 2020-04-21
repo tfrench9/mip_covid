@@ -1,6 +1,6 @@
 from PIL import Image
 import numpy as np
-from skimage.color import rgb2lab, lab2rgb
+from skimage.color import rgb2lab, lab2rgb, grey2rgb
 import matplotlib.pyplot as plt
 import matplotlib
 import scipy.misc
@@ -46,7 +46,7 @@ def getImages(types, p, tts):
                 fileName = '{}{}_{}_{}_{}.png'.format(path, types[i], pIDs[i][sample], index, lr)
                 image = plt.imread(fileName)
                 trainImages.append(image[:, :, :3])
-                trainLabels.append([types[i], pIDs[i][sample], index, lr, 'None', 'None', 'None'])
+                trainLabels.append([types[i], pIDs[i][sample], index, lr, 'None', 'None'])
         #Add images to resting set
         for sample in testSamples:
             #Find the set of images associated with a patient and select one
@@ -84,37 +84,13 @@ def colorNormalize(imageList):
         normalizedImages.append(np.stack((r, g, b), 2))
     return normalizedImages
 
-def cropRotateFlip(imageList, labelList, n):
-    imagesToReturn = []
-    lablelsToReturn = []
+def gaussianNoise(imageList, labelsList, strength):
+    strength = round(random.uniform(0, strength), 2)
     for i in range(len(imageList)):
-        origionalImage = imageList[i]
-        for j in range(n):
-            label = labelList[i]
-            #Crop Image
-            cropMax = 512 - 224
-            shift = np.random.randint(0, cropMax, 2)
-            label[1] = '{}, {}'.format(shift[0], shift[1])
-            image = origionalImage[shift[0]: shift[0] + 224, shift[1]: shift[1] + 224, :]
-            #Flip Image
-            flip = np.random.randint(0,2,2)
-            if flip[0] == 1 and flip[1] == 1:
-                image = image[::-1, :, :]
-                image = image[:, ::-1, :]
-                label[2] = 'H and V'
-            elif flip[0] == 1:
-                image = image[::-1, :, :]
-                label[2] = 'H Only'
-            elif flip[1] == 1:
-                image = image[:, ::-1, :]
-                label[2] = 'V Only'
-            #Rotate Image
-            rotations = np.random.randint(0, 4, 1)
-            image = np.rot90(image, k = rotations[0])
-            label[3] = '{}'.format(rotations[0] * 90)
-            imagesToReturn.append(image)
-            lablelsToReturn.append(label)
-    return imagesToReturn, lablelsToReturn
+        noise = grey2rgb(np.random.normal(0, strength, imageList[i].shape[:2]))
+        imageList[i] = (255 * imageList[i] + noise).astype('uint8') / 255
+        labelsList[i][5] = strength
+    return imageList, labelsList
 
 def saveSampleImages(imageList, labelList):
     samples = random.sample(range(0, len(imageList)), 25)

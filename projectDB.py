@@ -175,6 +175,9 @@ def renderTab1Content(clicks, type, operation, percentImages, sb, noise, tts):
             #trainFeatures = ef.getColorFeatures(trainImages)
             #testFeatures = ef.getColorFeatures(testImages)
             #Perform color normilization
+            print('adding noise')
+            if 'GN' in operation:
+                trainImages, trainLabels = cn.gaussianNoise(trainImages, trainLabels, noise)
             print('normalizing')
             if 'N' in operation:
                 trainImages = cn.colorNormalize(trainImages)
