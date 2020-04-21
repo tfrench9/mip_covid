@@ -2,49 +2,105 @@ from skimage.color import rgb2hsv, rgb2lab, rgb2gray
 from scipy.fftpack import dct
 from skimage.feature import canny, greycomatrix, greycoprops
 from skimage.measure import shannon_entropy
+from skimage.filters import sobel, prewitt
 import cv2
 import numpy as np
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 import scipy.misc
+from scipy.fftpack import dct, idct
 
-#Get RGB, HSV, and LAB color space means and STDs per layer (Indexes 0 - 11)
+#Get RGB, HSV, and LAB color space means and STDs per layer (Indexes 0 - 2)
 def getColorFeatures(images):
     toReturn = None
     for image in images:
-        hsv = rgb2hsv(image)
-        rgbMean = np.mean(image, axis = (0, 1))
-        rgbSTD = np.std(image, axis = (0, 1))
-        hsvMean = np.mean(hsv, axis = (0, 1))
-        hsvSTD = np.std(hsv, axis = (0, 1))
-        imageFeatures = np.concatenate((rgbMean.T, rgbSTD.T, hsvMean.T, hsvSTD.T))
+        grayMean = np.mean(image[:,:,0], axis = (0, 1))
+        graySTD = np.std(image[:,:,0], axis = (0, 1))
+        imageFeatures = np.array([grayMean, graySTD])
         if toReturn is None:
             toReturn = imageFeatures
         else:
             toReturn = np.vstack((toReturn, imageFeatures))
     return toReturn
 
+def dctReduced(image, xBlocks, yBlocks, hfThresh, nFreqs):
+
+    # Output Arrays
+    imageDCT = np.full(image.shape, 0)
+    imageHF = np.full(image.shape, 0)
+    imageHFReconstruct = np.full(image.shape, 1.0)
+    sobelFeatures = []
+    freqFeatures = []
+
+    for i in range(yBlocks):
+        for j in range(xBlocks):
+
+            # Break into Blocks
+            block = image[round(i*image.shape[0]/yBlocks):round((i + 1)*image.shape[0]/yBlocks), round(j*image.shape[1]/xBlocks):round((j+1)*image.shape[1]/xBlocks)]
+
+            # Compute DCT
+            freqs = dct(dct(block, axis=0),  axis=1)
+
+            # Sort Frequencies and Slice indices
+            hold = freqs.flatten()
+            highFreqsInds = np.argsort(abs(hold))[::-1][hfThresh:]
+
+            # Safe Frequency Features for output
+            freqFeatures.append(highFreqsInds[:nFreqs])
+            freqFeatures.append(hold[highFreqsInds][:nFreqs])
+
+            # Take only HF components
+            highFreqs = np.zeros(hold.shape)
+            highFreqs[highFreqsInds] = hold[highFreqsInds]
+            highFreqs = highFreqs.reshape(np.shape(freqs))
+
+            # Reconstruct
+            highFreqsReconstruct = idct(idct(highFreqs, axis=0), axis=1)
+            hfForSobel = np.round(256 * highFreqsReconstruct / (highFreqsReconstruct.max() - highFreqsReconstruct.min()) + highFreqsReconstruct.min())
+
+            sobelHFBlock = sobel(hfForSobel)
+            sobelFeatures.append(np.mean(sobelHFBlock, axis = (0, 1)))
+            sobelFeatures.append(np.max(sobelHFBlock, axis = (0, 1)))
+            sobelFeatures.append(np.median(sobelHFBlock, axis = (0, 1)))
+            sobelFeatures.append(np.std(sobelHFBlock, axis = (0, 1)))
+
+            # Log scale included for display
+            imageDCT[round(i*image.shape[0]/yBlocks):round((i+1)*image.shape[0]/yBlocks), round(j*image.shape[1]/xBlocks):round((j+1)*image.shape[1]/xBlocks)] = freqs
+            imageHF[round(i*image.shape[0]/yBlocks):round((i+1)*image.shape[0]/yBlocks), round(j*image.shape[1]/xBlocks):round((j+1)*image.shape[1]/xBlocks)] = highFreqs
+            imageHFReconstruct[round(i*image.shape[0]/yBlocks):round((i+1)*image.shape[0]/yBlocks), round(j*image.shape[1]/xBlocks):round((j+1)*image.shape[1]/xBlocks)] = highFreqsReconstruct
+
+    # Return outputs
+    imageHFReconstruct = np.round(256 * imageHFReconstruct / (imageHFReconstruct.max() - imageHFReconstruct.min()) + imageHFReconstruct.min())
+    return imageHFReconstruct, sobelFeatures, freqFeatures
+
 #Get a bunch of other features
 def getOtherFeatures(images):
     row = 0
-    toReturn = np.zeros([len(images), 87])
+    toReturn = np.zeros([len(images), 879])
     for image in images:
         gray = rgb2gray(image)
-        #Extract Canny Edge Density Mean and STDs (Indexes 18 - 23)
+
+        # Extract Frequency and HF Sobel Features
+        imageHFReconstruct, sobelFeatures, freqFeatures = dctReduced(gray, 2, 4, 400, 50)
+
+        # Extract Canny Edge Density Mean and STDs (Indexes 18 - 23)
         cannyImage1 = canny(gray, sigma = 1)
         cannyMean1 = np.mean(cannyImage1, axis = (0, 1))
         cannySTD1 = np.std(cannyImage1, axis = (0, 1))
+
         cannyImage2 = canny(gray, sigma = 2)
-        cannyMean2 = np.mean(cannyImage2, axis = (0, 1))
-        cannySTD2 = np.std(cannyImage2, axis = (0, 1))
+        cannyMean2 = np.mean(cannyImage1, axis = (0, 1))
+        cannySTD2 = np.std(cannyImage1, axis = (0, 1))
+
         cannyImage3 = canny(gray, sigma = 3)
         cannyMean3 = np.mean(cannyImage3, axis = (0, 1))
         cannySTD3 = np.std(cannyImage3, axis = (0, 1))
         cannyFeatures = np.array((cannyMean1, cannySTD1, cannyMean2, cannySTD2, cannyMean3, cannySTD3))
+
         #Extract DCT Frequencies and Magnitudes (Indexes 24 - 63)
-        imageDCT = dct(dct(gray, axis = 0),  axis = 1)
-        top10Freqs = np.argsort(abs(imageDCT.flatten()))[::-1][1:21]
-        dctMags = imageDCT.flatten()[top10Freqs]
-        dctFeatures = np.concatenate((top10Freqs, dctMags))
+        topFreqs = np.array(freqFeatures[::2]).flatten()
+        dctMags = np.array(freqFeatures[1::2]).flatten()
+        dctFeatures = np.concatenate((topFreqs, dctMags))
+
         #Extract GLCM Properties (Indexes 64 -78)
         glcmFeatures = np.zeros(15)
         props = ["contrast", "homogeneity", "energy", "correlation"]
@@ -60,6 +116,7 @@ def getOtherFeatures(images):
                 count += 1
             glcmFeatures[count] = shannon_entropy(glcms[i])
             count += 1
+
         #Extract Dialation and Erosion Means and STDs (Indexes 79 - 102)
         erodeDialateFeatures = np.zeros(24)
         kernel = np.array([[0, 0, 1, 0, 0], [0, 1, 1, 1, 0], [1, 1, 1, 1, 1], [0, 1, 1, 1, 0], [0, 0, 1, 0, 0]], np.uint8)
@@ -76,6 +133,7 @@ def getOtherFeatures(images):
             erodeDialateFeatures[(i * 8) + 5] = np.std(erosionEdge, axis = (0, 1))
             erodeDialateFeatures[(i * 8) + 6] = np.mean(dialationEdge, axis = (0, 1))
             erodeDialateFeatures[(i * 8) + 7] = np.std(dialationEdge, axis = (0, 1))
+
         #Circle Detection Counter (Indexes 103 - 104)
         circleFeatures = np.zeros(2)
         grayBlurred = cv2.blur(intGray, (3, 3))
@@ -85,8 +143,9 @@ def getOtherFeatures(images):
             circleFeatures[0] = smallCircles.shape[1]
         if bigCircles is not None:
             circleFeatures[1] = bigCircles.shape[1]
+
         #Concatonate all these features together
-        imageFeatures = np.concatenate((cannyFeatures, dctFeatures, glcmFeatures, erodeDialateFeatures, circleFeatures))
+        imageFeatures = np.concatenate((sobelFeatures, cannyFeatures, dctFeatures, glcmFeatures, erodeDialateFeatures, circleFeatures))
         toReturn[row, :] = imageFeatures
         row += 1
     return toReturn
