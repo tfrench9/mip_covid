@@ -122,3 +122,7 @@ def saveSampleImages(imageList, labelList):
         toReturn.append(labelList[i])
         count += 1
     return toReturn
+
+def saveAllImages(imageList, labelList):
+    for i in range(len(imageList)):
+        scipy.misc.toimage(imageList[i], cmin = 0, cmax = 1).save('CNNTest/{}_{}.png'.format(labelList[i][0], i))

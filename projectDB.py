@@ -184,6 +184,7 @@ def renderTab1Content(clicks, type, operation, percentImages, sb, noise, tts):
                 trainImages = cn.colorNormalize(trainImages)
                 testImages = cn.colorNormalize(testImages)
             print('saving')
+            cn.saveAllImages(trainImages, trainLabels)
             showLabels = cn.saveSampleImages(trainImages, trainLabels)
             toAppend = []
             for i in range(25):
