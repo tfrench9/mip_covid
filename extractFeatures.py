@@ -2,12 +2,14 @@ from skimage.color import rgb2hsv, rgb2lab, rgb2gray
 from scipy.fftpack import dct
 from skimage.feature import canny, greycomatrix, greycoprops
 from skimage.measure import shannon_entropy
-from skimage.filters import sobel, prewitt
+from skimage.filters import sobel, sobel_h, sobel_v, prewitt
+from scipy.ndimage import gaussian_filter
 import cv2
 import numpy as np
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
 import scipy.misc
 from scipy.fftpack import dct, idct
+import pywt
 
 #Get RGB, HSV, and LAB color space means and STDs per layer (Indexes 0 - 2)
 def getColorFeatures(images):
@@ -29,7 +31,8 @@ def dctReduced(image, xBlocks, yBlocks, hfThresh, nFreqs):
     imageHF = np.full(image.shape, 0)
     imageHFReconstruct = np.full(image.shape, 1.0)
     sobelFeatures = []
-    #freqFeatures = []
+    waveletFeatures = []
+    freqFeatures = []
 
     for i in range(yBlocks):
         for j in range(xBlocks):
@@ -63,6 +66,33 @@ def dctReduced(image, xBlocks, yBlocks, hfThresh, nFreqs):
             sobelFeatures.append(np.median(sobelHFBlock, axis = (0, 1)))
             sobelFeatures.append(np.std(sobelHFBlock, axis = (0, 1)))
 
+            sobelHFBlock = sobel_h(hfForSobel)
+            sobelFeatures.append(np.mean(sobelHFBlock, axis = (0, 1)))
+            sobelFeatures.append(np.max(sobelHFBlock, axis = (0, 1)))
+            sobelFeatures.append(np.median(sobelHFBlock, axis = (0, 1)))
+            sobelFeatures.append(np.std(sobelHFBlock, axis = (0, 1)))
+
+            sobelHFBlock = sobel_v(hfForSobel)
+            sobelFeatures.append(np.mean(sobelHFBlock, axis = (0, 1)))
+            sobelFeatures.append(np.max(sobelHFBlock, axis = (0, 1)))
+            sobelFeatures.append(np.median(sobelHFBlock, axis = (0, 1)))
+            sobelFeatures.append(np.std(sobelHFBlock, axis = (0, 1)))
+
+            coeffs2 = pywt.dwt2(block, 'bior1.3')
+            LL, (LH, HL, HH) = coeffs2
+            waveletFeatures.append(np.mean(HL, axis = (0, 1)))
+            waveletFeatures.append(np.max(HL, axis = (0, 1)))
+            waveletFeatures.append(np.median(HL, axis = (0, 1)))
+            waveletFeatures.append(np.std(HL, axis = (0, 1)))
+
+            holdHF = np.round(256*(highFreqs - np.min(highFreqs))/(np.max(highFreqs)-np.min(highFreqs)))
+            holdBlur = gaussian_filter(holdHF, sigma = 10)
+            holdSobel = sobel(holdBlur)
+            freqFeatures.append(np.mean(holdSobel, axis = (0, 1)))
+            freqFeatures.append(np.max(holdSobel, axis = (0, 1)))
+            freqFeatures.append(np.median(holdSobel, axis = (0, 1)))
+            freqFeatures.append(np.std(holdSobel, axis = (0, 1)))
+
             # Log scale included for display
             imageDCT[round(i*image.shape[0]/yBlocks):round((i+1)*image.shape[0]/yBlocks), round(j*image.shape[1]/xBlocks):round((j+1)*image.shape[1]/xBlocks)] = freqs
             imageHF[round(i*image.shape[0]/yBlocks):round((i+1)*image.shape[0]/yBlocks), round(j*image.shape[1]/xBlocks):round((j+1)*image.shape[1]/xBlocks)] = highFreqs
@@ -70,17 +100,17 @@ def dctReduced(image, xBlocks, yBlocks, hfThresh, nFreqs):
 
     # Return outputs
     imageHFReconstruct = np.round(256 * imageHFReconstruct / (imageHFReconstruct.max() - imageHFReconstruct.min()) + imageHFReconstruct.min())
-    return imageHFReconstruct, sobelFeatures
+    return imageHFReconstruct, sobelFeatures, waveletFeatures, freqFeatures
 
 #Get a bunch of other features
 def getOtherFeatures(images):
     row = 0
-    toReturn = np.zeros([len(images), 79])
+    toReturn = np.zeros([len(images), 207])
     for image in images:
         gray = rgb2gray(image)
 
         # Extract Frequency and HF Sobel Features
-        imageHFReconstruct, sobelFeatures = dctReduced(gray, 2, 4, 400, 50)
+        imageHFReconstruct, sobelFeatures, waveletFeatures, freqFeatures = dctReduced(gray, 2, 4, 400, 50)
 
         # Extract Canny Edge Density Mean and STDs (Indexes 18 - 23)
         cannyImage1 = canny(gray, sigma = 1)
@@ -145,7 +175,7 @@ def getOtherFeatures(images):
             circleFeatures[1] = bigCircles.shape[1]
 
         #Concatonate all these features together
-        imageFeatures = np.concatenate((sobelFeatures, cannyFeatures, glcmFeatures, erodeDialateFeatures, circleFeatures))
+        imageFeatures = np.concatenate((sobelFeatures, waveletFeatures, freqFeatures, cannyFeatures, glcmFeatures, erodeDialateFeatures, circleFeatures))
         toReturn[row, :] = imageFeatures
         row += 1
     return toReturn
