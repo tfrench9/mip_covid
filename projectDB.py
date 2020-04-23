@@ -212,7 +212,7 @@ def renderTab2Content(clicks):
         trainFeaturesDF.insert(0, "Class", [x[0] for x in trainLabels])
         trainFeaturesDF.insert(1, "PID", [x[1] for x in trainLabels])
         trainFeaturesDF.insert(2, "L/R Lung", [x[3] for x in trainLabels])
-        trainFeaturesDF.to_csv("trainFeatures.csv")
+        trainFeaturesDF.to_csv("trainFeatures2.csv")
         #trainFeatures = np.hstack((trainFeatures, h1))
         testFeatures = ef.getOtherFeatures(testImages)
         #testFeatures = np.hstack((testFeatures, h2))
@@ -220,7 +220,7 @@ def renderTab2Content(clicks):
         testFeaturesDF.insert(0, "Class", [x[0] for x in testLabels])
         testFeaturesDF.insert(1, "PID", [x[1] for x in testLabels])
         testFeaturesDF.insert(2, "L/R Lung", [x[3] for x in testLabels])
-        testFeaturesDF.to_csv("testFeatures.csv")
+        testFeaturesDF.to_csv("testFeatures2.csv")
         points, numLabels, variance, lda = ef.performLDA(trainFeatures, trainLabels)
         if points.shape[1] == 1:
             points = np.hstack((points, np.zeros([points.shape[0], 1])))
@@ -281,7 +281,7 @@ def displayClickData(clickData):
             html.P('L/R Lung: {}, Blur/Sharpen: {}, Noise: {}'.format(trainLabels[index][3], trainLabels[index][4], trainLabels[index][5]), style = {'textAlign': 'center'}),
             html.Img(id = 'lda-image', src = Image.open('DisplayImages/efOrigionalImage.png'), style = {'width': '26%', 'padding-left': '37%', 'padding-right': '37%'}),
             html.H3('Color Features', style = {'textAlign': 'center', 'padding-top': '30px'}),
-            html.P('Mean and Standard Deviation of the Intensity wer Saved as Features.', style = {'textAlign': 'center'}),
+            html.P('Mean and Standard Deviation of the Intensity were Saved as Features.', style = {'textAlign': 'center'}),
             dcc.Graph(id = 'rgb-histogram', figure = colorFig),
             #html.H3('DCT Features', style = {'textAlign': 'center', 'padding-top': '30px'}),
             #html.P('The top 20 frequencies and their magnitudes were saved as features.', style = {'textAlign': 'center'}),
