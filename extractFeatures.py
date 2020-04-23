@@ -5,7 +5,7 @@ from skimage.measure import shannon_entropy
 from skimage.filters import sobel, prewitt
 import cv2
 import numpy as np
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
 import scipy.misc
 from scipy.fftpack import dct, idct
 
@@ -29,7 +29,7 @@ def dctReduced(image, xBlocks, yBlocks, hfThresh, nFreqs):
     imageHF = np.full(image.shape, 0)
     imageHFReconstruct = np.full(image.shape, 1.0)
     sobelFeatures = []
-    freqFeatures = []
+    #freqFeatures = []
 
     for i in range(yBlocks):
         for j in range(xBlocks):
@@ -45,8 +45,8 @@ def dctReduced(image, xBlocks, yBlocks, hfThresh, nFreqs):
             highFreqsInds = np.argsort(abs(hold))[::-1][hfThresh:]
 
             # Safe Frequency Features for output
-            freqFeatures.append(highFreqsInds[:nFreqs])
-            freqFeatures.append(hold[highFreqsInds][:nFreqs])
+    #        freqFeatures.append(highFreqsInds[:nFreqs])
+    #        freqFeatures.append(hold[highFreqsInds][:nFreqs])
 
             # Take only HF components
             highFreqs = np.zeros(hold.shape)
@@ -70,17 +70,17 @@ def dctReduced(image, xBlocks, yBlocks, hfThresh, nFreqs):
 
     # Return outputs
     imageHFReconstruct = np.round(256 * imageHFReconstruct / (imageHFReconstruct.max() - imageHFReconstruct.min()) + imageHFReconstruct.min())
-    return imageHFReconstruct, sobelFeatures, freqFeatures
+    return imageHFReconstruct, sobelFeatures
 
 #Get a bunch of other features
 def getOtherFeatures(images):
     row = 0
-    toReturn = np.zeros([len(images), 879])
+    toReturn = np.zeros([len(images), 79])
     for image in images:
         gray = rgb2gray(image)
 
         # Extract Frequency and HF Sobel Features
-        imageHFReconstruct, sobelFeatures, freqFeatures = dctReduced(gray, 2, 4, 400, 50)
+        imageHFReconstruct, sobelFeatures = dctReduced(gray, 2, 4, 400, 50)
 
         # Extract Canny Edge Density Mean and STDs (Indexes 18 - 23)
         cannyImage1 = canny(gray, sigma = 1)
@@ -97,9 +97,9 @@ def getOtherFeatures(images):
         cannyFeatures = np.array((cannyMean1, cannySTD1, cannyMean2, cannySTD2, cannyMean3, cannySTD3))
 
         #Extract DCT Frequencies and Magnitudes (Indexes 24 - 63)
-        topFreqs = np.array(freqFeatures[::2]).flatten()
-        dctMags = np.array(freqFeatures[1::2]).flatten()
-        dctFeatures = np.concatenate((topFreqs, dctMags))
+        # topFreqs = np.array(freqFeatures[::2]).flatten()
+        # dctMags = np.array(freqFeatures[1::2]).flatten()
+        # dctFeatures = np.concatenate((topFreqs, dctMags))
 
         #Extract GLCM Properties (Indexes 64 -78)
         glcmFeatures = np.zeros(15)
@@ -145,7 +145,7 @@ def getOtherFeatures(images):
             circleFeatures[1] = bigCircles.shape[1]
 
         #Concatonate all these features together
-        imageFeatures = np.concatenate((sobelFeatures, cannyFeatures, dctFeatures, glcmFeatures, erodeDialateFeatures, circleFeatures))
+        imageFeatures = np.concatenate((sobelFeatures, cannyFeatures, glcmFeatures, erodeDialateFeatures, circleFeatures))
         toReturn[row, :] = imageFeatures
         row += 1
     return toReturn
@@ -164,6 +164,21 @@ def performLDA(features, labels):
     projection = lda.fit(X, Y).transform(X)
     # Percentage of variance explained for each components
     return projection, Y, lda.explained_variance_ratio_, lda
+
+def performQDA(features, labels):
+    X = features
+    Y = np.zeros(len(labels))
+    for i in range(len(labels)):
+        if 'No' in labels[i][0]:
+            Y[i] = 0
+        elif 'Pn' in labels[i][0]:
+            Y[i] = 1
+        elif 'CO' in labels[i][0]:
+            Y[i] = 2
+    qda = QuadraticDiscriminantAnalysis(n_components = 2)
+    projection = qda.fit(X, Y).transform(X)
+    # Percentage of variance explained for each components
+    return projection, Y, qda.explained_variance_ratio_, lda
 
 def performProjectionLDA(features, labels, lda):
     X = features

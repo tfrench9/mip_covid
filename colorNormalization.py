@@ -24,14 +24,18 @@ def getImages(types, p, tts):
         pID = [d.split('_')[1] for d, s in zip(fileNames, mask) if s]
         lengths.append(len(set(pID)))
         pIDs.append(pID)
-    nTrain = int(int(min(lengths) * p) * tts)
-    nTest = int(min(lengths) * p) - nTrain
+    #nTrain = int(int(min(lengths) * p) * tts)
+    nTest = int(int(min(lengths) * p) * (1 - tts))
     #Iterate through image classes and read in images
     trainImages = []
     testImages = []
     trainLabels = []
     testLabels = []
     for i in range(len(types)):
+        nTrain = int(lengths[i] * p) - nTest
+        print(types[i])
+        print(nTrain)
+        print(nTest)
         #Randomly select the max patient IDs
         samples = random.sample(range(lengths[i]), nTrain + nTest)
         trainSamples = samples[:nTrain]

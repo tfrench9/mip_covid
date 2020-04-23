@@ -165,28 +165,24 @@ def renderTabContent(tab):
               Input('gn-slider', 'value'),
               Input('tts-slider', 'value')])
 def renderTab1Content(clicks, type, operation, percentImages, sb, noise, tts):
-    global totalClicks, trainImages, testImages, trainLabels, testLabels, preCNTrainImages, trainFeatures
+    global totalClicks, trainImages, testImages, trainLabels, testLabels, preCNTrainImages, trainFeatures, testFeatures
     if clicks is not None and clicks > totalClicks:
         if type is not None and operation is not None:
             #Read in images from the file
-            print('reading images')
             trainImages, testImages, trainLabels, testLabels = cn.getImages(type, percentImages / 100, tts / 100)
             #Copy image array and extract pre-normilization color features
             preCNTrainImages = trainImages
-            print('gathering features')
-            trainFeatures = ef.getColorFeatures(trainImages)
-            testFeatures = ef.getColorFeatures(testImages)
+            #trainFeatures = ef.getColorFeatures(trainImages)
+            #testFeatures = ef.getColorFeatures(testImages)
+            #Apply the selected operations
             if 'SB' in operation:
                 trainImages, trainLabels = cn.blurSharpen(trainImages, trainLabels, sb[0], sb[1])
-            print('adding noise')
             if 'GN' in operation:
                 trainImages, trainLabels = cn.gaussianNoise(trainImages, trainLabels, noise)
-            print('normalizing')
             if 'N' in operation:
                 trainImages = cn.colorNormalize(trainImages)
                 testImages = cn.colorNormalize(testImages)
-            print('saving')
-            cn.saveAllImages(trainImages, trainLabels)
+            #Compile a random set of images to display
             showLabels = cn.saveSampleImages(trainImages, trainLabels)
             toAppend = []
             for i in range(25):
@@ -211,10 +207,20 @@ def renderTab1Content(clicks, type, operation, percentImages, sb, noise, tts):
 def renderTab2Content(clicks):
     global trainImages, testImages, trainLabels, testLabels, trainFeatures, testFeatures, ldaPoints, numLabels, lda
     if clicks is not None:
-        moreFeatures = ef.getOtherFeatures(trainImages)
-        trainFeatures = np.hstack((trainFeatures, moreFeatures))
-        #moreFeatures = ef.getOtherFeatures(testImages)
-        #testFeatures = np.hstack((testFeatures, moreFeatures))
+        trainFeatures = ef.getOtherFeatures(trainImages)
+        trainFeaturesDF = pd.DataFrame(data = trainFeatures)
+        trainFeaturesDF.insert(0, "Class", [x[0] for x in trainLabels])
+        trainFeaturesDF.insert(1, "PID", [x[1] for x in trainLabels])
+        trainFeaturesDF.insert(2, "L/R Lung", [x[3] for x in trainLabels])
+        trainFeaturesDF.to_csv("trainFeatures.csv")
+        #trainFeatures = np.hstack((trainFeatures, h1))
+        testFeatures = ef.getOtherFeatures(testImages)
+        #testFeatures = np.hstack((testFeatures, h2))
+        testFeaturesDF = pd.DataFrame(data = testFeatures)
+        testFeaturesDF.insert(0, "Class", [x[0] for x in testLabels])
+        testFeaturesDF.insert(1, "PID", [x[1] for x in testLabels])
+        testFeaturesDF.insert(2, "L/R Lung", [x[3] for x in testLabels])
+        testFeaturesDF.to_csv("testFeatures.csv")
         points, numLabels, variance, lda = ef.performLDA(trainFeatures, trainLabels)
         if points.shape[1] == 1:
             points = np.hstack((points, np.zeros([points.shape[0], 1])))
@@ -262,65 +268,57 @@ def renderTab2Content(clicks):
 @app.callback(Output('click-data', 'children'),
             [Input('lda-graph', 'clickData')])
 def displayClickData(clickData):
-    global images, preCMImages, labels, ldaPoints, features
+    global trainImages, testImages, trainLabels, testLabels, trainFeatures, testFeatures, ldaPoints, numLabels, lda, preCNTrainImages
     if clickData is not None:
         index = np.where(ldaPoints == clickData['points'][0]['x'])[0][0]
-        image = images[index]
-        preCMImage = preCMImages[index]
-        ef.savePicture(preCMImage, 'efOrigionalImage')
-        rgbFig = ff.create_distplot([list(preCMImage[::4, ::4, 0].flatten()), list(preCMImage[::4, ::4, 1].flatten()), list(preCMImage[::4, ::4, 2].flatten())], ['Red Layer', 'Green Layer', 'Blue Layer'], colors = ['red', 'green', 'blue'], bin_size = 0.02)
-        rgbFig.update_layout({'title': 'RBG Histogram', 'xaxis': {'title': 'Color Layer Values', 'range': [0, 1]}, 'yaxis': {'title': 'Count'}, 'plot_bgcolor': 'rgba(0, 0, 0, 0)'})
-        preCMImage1 = rgb2hsv(preCMImage)
-        hsvFig = ff.create_distplot([list(preCMImage1[::4, ::4, 0].flatten()), list(preCMImage1[::4, ::4, 1].flatten()), list(preCMImage1[::4, ::4, 2].flatten())], ['Hue Layer', 'Saturation Layer', 'Value Layer'], colors = ['red', 'gray', 'black'], bin_size = 0.02)
-        hsvFig.update_layout({'title': 'HSV Histogram', 'xaxis': {'title': 'Color Layer Values', 'range': [0, 1]}, 'yaxis': {'title': 'Count'}, 'plot_bgcolor': 'rgba(0, 0, 0, 0)'})
-        preCMImage2 = rgb2lab(preCMImage)
-        labFig = ff.create_distplot([list(preCMImage2[::4, ::4, 0].flatten()), list(preCMImage2[::4, ::4, 1].flatten()), list(preCMImage2[::4, ::4, 2].flatten())], ['L Layer', 'A Layer', 'B Layer'], colors = ['cyan', 'magenta', 'orange'], bin_size = 0.02)
-        labFig.update_layout({'title': 'LAB Histogram', 'xaxis': {'title': 'Color Layer Values', 'range': [0, 1]}, 'yaxis': {'title': 'Count'}, 'plot_bgcolor': 'rgba(0, 0, 0, 0)'})
+        trainImage = trainImages[index]
+        preCNTrainImage = preCNTrainImages[index]
+        ef.savePicture(preCNTrainImage, 'efOrigionalImage')
+        colorFig = ff.create_distplot([list(preCNTrainImage[::4, ::4, 0].flatten())], ['Intensity'], colors = ['black'], bin_size = 0.02)
+        colorFig.update_layout({'title': 'Intensity Histogram', 'xaxis': {'title': 'Intensity Value', 'range': [0, 1]}, 'yaxis': {'title': 'Count'}, 'plot_bgcolor': 'rgba(0, 0, 0, 0)'})
         return [
-            html.P('Origional Image Filename: {}'.format(labels[index][0]), style = {'textAlign': 'center', 'padding-top': '30px'}),
-            html.P('Crop: {}, Flip: {}, Rotate: {}'.format(labels[index][1], labels[index][2], labels[index][3]), style = {'textAlign': 'center'}),
+            html.P('Origional Image Type: {}, Patient ID: {}'.format(trainLabels[index][0], trainLabels[index][1]), style = {'textAlign': 'center', 'padding-top': '30px'}),
+            html.P('L/R Lung: {}, Blur/Sharpen: {}, Noise: {}'.format(trainLabels[index][3], trainLabels[index][4], trainLabels[index][5]), style = {'textAlign': 'center'}),
             html.Img(id = 'lda-image', src = Image.open('DisplayImages/efOrigionalImage.png'), style = {'width': '26%', 'padding-left': '37%', 'padding-right': '37%'}),
             html.H3('Color Features', style = {'textAlign': 'center', 'padding-top': '30px'}),
-            html.P('Means and standard deviations of each layer in each color mode were saved as features.', style = {'textAlign': 'center'}),
-            dcc.Graph(id = 'rgb-histogram', figure = rgbFig),
-            dcc.Graph(id = 'hsv-histogram', figure = hsvFig),
-            dcc.Graph(id = 'lab-histogram', figure = labFig),
-            html.H3('DCT Features', style = {'textAlign': 'center', 'padding-top': '30px'}),
-            html.P('The top 20 frequencies and their magnitudes were saved as features.', style = {'textAlign': 'center'}),
-            dcc.Graph(id = 'dct-stem', figure = {'data': [
-                {'x': features[index, 24:43], 'y': features[index, 44:63], 'mode': 'markers', 'name': 'Important Frequencies'},
-                {'x': features[index, 24:43], 'y': features[index, 44:63], 'type': 'bar', 'name': ''}],
-                'layout': {
-                    'title': 'Top 20 Frequenceis (Not Including DC Componant)',
-                    'xaxis': {'title': 'Index'},
-                    'yaxis': {'title': 'Magnitude'},
-                }}),
-            html.H3('GLCM Features', style = {'textAlign': 'center', 'padding-top': '30px'}),
-            html.P('GLCM taken in 8 directions at distances of 1, 3, and 5 were saved as features.', style = {'textAlign': 'center'}),
-            html.P('(Contrast, Homogeneity, Energy, Correlation, Entropy)', style = {'textAlign': 'center'}),
-            html.P('Distace 1: ({:0.2f}, {:0.2f}, {:0.2f}, {:0.2f}, {:0.2f})'.format(features[index, 64], features[index, 65], features[index, 66], features[index, 67], features[index, 68]), style = {'textAlign': 'center'}),
-            html.P('Distace 3: ({:0.2f}, {:0.2f}, {:0.2f}, {:0.2f}, {:0.2f})'.format(features[index, 69], features[index, 70], features[index, 71], features[index, 72], features[index, 73]), style = {'textAlign': 'center'}),
-            html.P('Distace 5: ({:0.2f}, {:0.2f}, {:0.2f}, {:0.2f}, {:0.2f})'.format(features[index, 74], features[index, 75], features[index, 76], features[index, 77], features[index, 78]), style = {'textAlign': 'center'}),
-            html.H3('Morphological Features', style = {'textAlign': 'center', 'padding-top': '30px'}),
-            html.P('Means and standard deviations of edge densitites were saved as features.', style = {'textAlign': 'center'}),
-            html.P('(Erosion, Dialation)', style = {'textAlign': 'center'}),
-            html.Img(src = Image.open('DisplayImages/erosion.png'), style = {'width': '20%', 'padding-left': '25%', 'padding-right': '5%'}),
-            html.Img(src = Image.open('DisplayImages/dialation.png'), style = {'width': '20%', 'padding-left': '5%', 'padding-right': '25%'}),
-            html.P('(Canny, Eroded Canny, Dialated Canny)', style = {'textAlign': 'center'}),
-            html.Img(src = Image.open('DisplayImages/canny.png'), style = {'width': '20%', 'padding-left': '10%', 'padding-right': '5%'}),
-            html.Img(src = Image.open('DisplayImages/erosionEdge.png'), style = {'width': '20%', 'padding-left': '5%', 'padding-right': '5%'}),
-            html.Img(src = Image.open('DisplayImages/dialationEdge.png'), style = {'width': '20%', 'padding-left': '5%', 'padding-right': '10%'}),
-            html.P('Number of Small Circles: {}'.format(features[index, 103]), style = {'textAlign': 'center'}),
-            html.P('Number of Big Circles: {}'.format(features[index, 104]), style = {'textAlign': 'center'})
+            html.P('Mean and Standard Deviation of the Intensity wer Saved as Features.', style = {'textAlign': 'center'}),
+            dcc.Graph(id = 'rgb-histogram', figure = colorFig),
+            #html.H3('DCT Features', style = {'textAlign': 'center', 'padding-top': '30px'}),
+            #html.P('The top 20 frequencies and their magnitudes were saved as features.', style = {'textAlign': 'center'}),
+            #dcc.Graph(id = 'dct-stem', figure = {'data': [
+            #    {'x': features[index, 24:43], 'y': features[index, 44:63], 'mode': 'markers', 'name': 'Important Frequencies'},
+            #    {'x': features[index, 24:43], 'y': features[index, 44:63], 'type': 'bar', 'name': ''}],
+            #    'layout': {
+            #        'title': 'Top 20 Frequenceis (Not Including DC Componant)',
+            #        'xaxis': {'title': 'Index'},
+            #        'yaxis': {'title': 'Magnitude'},
+            #    }}),
+            #html.H3('GLCM Features', style = {'textAlign': 'center', 'padding-top': '30px'}),
+            #html.P('GLCM taken in 8 directions at distances of 1, 3, and 5 were saved as features.', style = {'textAlign': 'center'}),
+            #html.P('(Contrast, Homogeneity, Energy, Correlation, Entropy)', style = {'textAlign': 'center'}),
+            #html.P('Distace 1: ({:0.2f}, {:0.2f}, {:0.2f}, {:0.2f}, {:0.2f})'.format(features[index, 64], features[index, 65], features[index, 66], features[index, 67], features[index, 68]), style = {'textAlign': 'center'}),
+            #html.P('Distace 3: ({:0.2f}, {:0.2f}, {:0.2f}, {:0.2f}, {:0.2f})'.format(features[index, 69], features[index, 70], features[index, 71], features[index, 72], features[index, 73]), style = {'textAlign': 'center'}),
+            #html.P('Distace 5: ({:0.2f}, {:0.2f}, {:0.2f}, {:0.2f}, {:0.2f})'.format(features[index, 74], features[index, 75], features[index, 76], features[index, 77], features[index, 78]), style = {'textAlign': 'center'}),
+            #html.H3('Morphological Features', style = {'textAlign': 'center', 'padding-top': '30px'}),
+            #html.P('Means and standard deviations of edge densitites were saved as features.', style = {'textAlign': 'center'}),
+            #html.P('(Erosion, Dialation)', style = {'textAlign': 'center'}),
+            #html.Img(src = Image.open('DisplayImages/erosion.png'), style = {'width': '20%', 'padding-left': '25%', 'padding-right': '5%'}),
+            #html.Img(src = Image.open('DisplayImages/dialation.png'), style = {'width': '20%', 'padding-left': '5%', 'padding-right': '25%'}),
+            #html.P('(Canny, Eroded Canny, Dialated Canny)', style = {'textAlign': 'center'}),
+            #html.Img(src = Image.open('DisplayImages/canny.png'), style = {'width': '20%', 'padding-left': '10%', 'padding-right': '5%'}),
+            #html.Img(src = Image.open('DisplayImages/erosionEdge.png'), style = {'width': '20%', 'padding-left': '5%', 'padding-right': '5%'}),
+            #html.Img(src = Image.open('DisplayImages/dialationEdge.png'), style = {'width': '20%', 'padding-left': '5%', 'padding-right': '10%'}),
+            #html.P('Number of Small Circles: {}'.format(features[index, 103]), style = {'textAlign': 'center'}),
+            #html.P('Number of Big Circles: {}'.format(features[index, 104]), style = {'textAlign': 'center'})
         ]
 
 #Tab3 callback
 @app.callback(Output('prediction-content', 'children'),
              [Input('prediction-button', 'n_clicks')])
 def renderTab3Content(clicks):
-    global images, labels, features, ldaPoints, numLabels, lda, points, newNumLabels
+    global trainImages, testImages, trainLabels, testLabels, trainFeatures, testFeatures, ldaPoints, numLabels, lda, points, newNumLabels
     if clicks is not None:
-        points, newNumLabels = ef.performProjectionLDA(features[ttsIndex:, :], labels[ttsIndex:], lda)
+        points, newNumLabels = ef.performProjectionLDA(testFeatures, testLabels, lda)
         if points.shape[1] == 1:
             points = np.hstack((points, np.zeros([points.shape[0], 1])))
         return [
@@ -333,7 +331,7 @@ def renderTab3Content(clicks):
                             'y': ldaPoints[numLabels == 0, 1],
                             'mode': 'markers',
                             'opacity': 0.5,
-                            'name': 'Necrosis',
+                            'name': 'Healthy',
                             'marker': {'size': 8}
                         },
                         {
@@ -341,7 +339,7 @@ def renderTab3Content(clicks):
                             'y': ldaPoints[numLabels == 1, 1],
                             'mode': 'markers',
                             'opacity': 0.5,
-                            'name': 'Stroma',
+                            'name': 'Pneumothorax',
                             'marker': {'size': 8}
                         },
                         {
@@ -349,28 +347,28 @@ def renderTab3Content(clicks):
                             'y': ldaPoints[numLabels == 2, 1],
                             'mode': 'markers',
                             'opacity': 0.5,
-                            'name': 'Tumor',
+                            'name': 'COVID-19',
                             'marker': {'size': 8}
                         },
                         {
                             'x': points[newNumLabels == 0, 0],
                             'y': points[newNumLabels == 0, 1],
                             'mode': 'markers',
-                            'name': 'Testing Necrosis',
+                            'name': 'Testing Healthy',
                             'marker': {'size': 8, 'symbol': 'x', 'color': '#1f77b4'}
                         },
                         {
                             'x': points[newNumLabels == 1, 0],
                             'y': points[newNumLabels == 1, 1],
                             'mode': 'markers',
-                            'name': 'Testing Stroma',
+                            'name': 'Testing Pneumothorax',
                             'marker': {'size': 8, 'symbol': 'x', 'color': '#ff7f0e'}
                         },
                         {
                             'x': points[newNumLabels == 2, 0],
                             'y': points[newNumLabels == 2, 1],
                             'mode': 'markers',
-                            'name': 'Testing Tumor',
+                            'name': 'Testing COVID-19',
                             'marker': {'size': 8, 'symbol': 'x', 'color': '#2ca02c'}
                         },
 
@@ -486,7 +484,7 @@ def displayParameterContent(clicks, algs):
               Input('SVM-dropdown', 'value'),
               Input('C-slider', 'value')])
 def runResults(clicks, algs, kmK, knnK, svmKernel, svmC):
-    global lastClicks, ldaPoints, numLabels, points, newNumLabels
+    global trainImages, testImages, trainLabels, testLabels, trainFeatures, testFeatures, ldaPoints, numLabels, lda, points, newNumLabels, lastClicks
     if clicks is not None and clicks > lastClicks:
         lastClicks = clicks
         data = []
@@ -502,7 +500,7 @@ def runResults(clicks, algs, kmK, knnK, svmKernel, svmC):
         if 'SVM' in algs:
             r = pm.svm(ldaPoints, numLabels, points, newNumLabels, svmKernel, svmC)
             data.append(pm.formatResults('SVM ({} kernel, c = {})'.format(svmKernel, svmC), r))
-        cols = ['Classifier', 'Overall Accuracy', 'Necrosis Properly Labeled', 'Necrosis Labeled as Stroma', 'Necrosis Labeled as Tumor', 'Stroma Properly Labeled', 'Stroma Labeled as Necrosis', 'Stroma Labeled as Tumor', 'Tumor Properly Labeled', 'Tumor Labeled as Necrosis', 'Tumor Labeled as Stroma']
+        cols = ['Classifier', 'Overall Accuracy', 'Healthy Properly Labeled', 'Healthy Labeled as Pneumothorax', 'Healthy Labeled as COVID-19', 'Pneumothorax Properly Labeled', 'Pneumothorax Labeled as Healthy', 'Pneumothorax Labeled as COVID-19', 'COVID-19 Properly Labeled', 'COVID-19 Labeled as Healthy', 'COVID-19 Labeled as Pneumothorax']
         df = pd.DataFrame(data = data, columns = cols)
         return [html.Div(children = [
             dash_table.DataTable(
