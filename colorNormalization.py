@@ -24,6 +24,7 @@ def getImages(types, p, tts):
         pID = [d.split('_')[1] for d, s in zip(fileNames, mask) if s]
         lengths.append(len(set(pID)))
         pIDs.append(pID)
+    print(pIDs)
     #nTrain = int(int(min(lengths) * p) * tts)
     nTest = int(int(min(lengths) * p) * (1 - tts))
     #Iterate through image classes and read in images

@@ -212,7 +212,7 @@ def renderTab2Content(clicks):
         trainFeaturesDF.insert(0, "Class", [x[0] for x in trainLabels])
         trainFeaturesDF.insert(1, "PID", [x[1] for x in trainLabels])
         trainFeaturesDF.insert(2, "L/R Lung", [x[3] for x in trainLabels])
-        trainFeaturesDF.to_csv("trainFeatures2.csv")
+        trainFeaturesDF.to_csv("trainFeatures3.csv")
         #trainFeatures = np.hstack((trainFeatures, h1))
         testFeatures = ef.getOtherFeatures(testImages)
         #testFeatures = np.hstack((testFeatures, h2))
@@ -220,7 +220,7 @@ def renderTab2Content(clicks):
         testFeaturesDF.insert(0, "Class", [x[0] for x in testLabels])
         testFeaturesDF.insert(1, "PID", [x[1] for x in testLabels])
         testFeaturesDF.insert(2, "L/R Lung", [x[3] for x in testLabels])
-        testFeaturesDF.to_csv("testFeatures2.csv")
+        testFeaturesDF.to_csv("testFeatures3.csv")
         points, numLabels, variance, lda = ef.performLDA(trainFeatures, trainLabels)
         if points.shape[1] == 1:
             points = np.hstack((points, np.zeros([points.shape[0], 1])))
